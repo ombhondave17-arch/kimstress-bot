@@ -1,0 +1,6 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "clang -o attack attack.c -lpthread"
+  }
+}
